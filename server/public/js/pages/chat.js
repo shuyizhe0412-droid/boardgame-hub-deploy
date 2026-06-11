@@ -234,18 +234,21 @@ App.registerPage('chat', (function() {
             }
         }
 
-        // 先添加一个空的 AI 消息占位
-        session.messages.push({
-            role: 'assistant',
-            content: ''
-        });
-        var aiIndex = session.messages.length - 1;
+        // 流式接收 - 先用 typing 指示器占位，收到首块内容后再添加气泡
         state.isTyping = true;
         refreshMessages();
-
-        // 流式接收
+        var aiMessageAdded = false;
+        var aiIndex = -1;
         var mode = state.currentMode || 'rules';
         window.askAIStream(state.gameId, userMessage, mode, history, function(chunk) {
+            // 首块内容到达：移除 typing 指示器，添加AI消息气泡
+            if (!aiMessageAdded) {
+                aiMessageAdded = true;
+                state.isTyping = false;
+                session.messages.push({ role: 'assistant', content: '' });
+                aiIndex = session.messages.length - 1;
+                refreshMessages();
+            }
             // 每收到一块内容，更新 AI 消息
             session.messages[aiIndex].content += chunk;
             // 更新 DOM 中的气泡
