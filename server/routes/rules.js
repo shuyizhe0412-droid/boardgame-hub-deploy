@@ -181,7 +181,7 @@ async function translateSectionsBatch(sections) {
       temperature: 0.1,
       messages: [{
         role: 'system',
-        content: '你是专业桌游规则翻译。要求：\n1. 严格逐段翻译，保留【第X页】标记\n2. 用 --- 分隔各段落\n3. 桌游专有名词保留原文（如卡牌名、角色名）\n4. 数字、符号原样保留\n5. 只输出翻译结果，不加解释'
+        content: '你是专业桌游规则翻译。要求：\n1. 全部翻译为中文，包括标题和小标题\n2. 严格逐段翻译，保留【第X页】标记\n3. 用 --- 分隔各段落\n4. 只有卡牌名和角色名保留原文\n5. 数字、符号原样保留\n6. 只输出翻译结果，不加解释'
       }, {
         role: 'user',
         content: '翻译以下桌游规则书为中文：\n\n' + combined
