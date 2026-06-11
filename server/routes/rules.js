@@ -147,7 +147,8 @@ async function ocrImage(filePath, mimeType) {
 
 // 解析 PDF 文本
 async function extractPdfText(filePath) {
-  const pdfParse = require('pdf-parse');
+  const pdfParseLib = require('pdf-parse');
+  const pdfParse = pdfParseLib.default || pdfParseLib;
   const dataBuffer = fs.readFileSync(filePath);
   const data = await pdfParse(dataBuffer);
   return {
