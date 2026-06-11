@@ -366,6 +366,24 @@ router.post('/search', async (req, res) => {
   }
 });
 
+// GET /api/rules/debug-translate - 测试翻译功能
+router.get('/debug-translate', authMiddleware, async (req, res) => {
+  try {
+    var testSections = [
+      { page_number: 1, section_title: '测试', content: 'Setup: Shuffle all cards and deal 7 to each player.' },
+      { page_number: 2, section_title: '测试', content: 'On your turn, play a card matching color or number.' }
+    ];
+    var result = await translateSectionsBatch(testSections);
+    res.json({ 
+      success: true, 
+      original: testSections.map(function(s) { return s.content; }),
+      translated: result.map(function(s) { return s.content; })
+    });
+  } catch (err) {
+    res.json({ success: false, error: err.message, stack: err.stack });
+  }
+});
+
 // GET /api/rules/:gameId - 获取某游戏所有规则段落（公开）
 router.get('/:gameId', async (req, res) => {
   try {
@@ -455,24 +473,6 @@ router.delete('/game/:gameId', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('[RULES] 清空失败:', err.message);
     res.status(500).json({ error: '清空失败' });
-  }
-});
-
-// GET /api/rules/debug-translate - 测试翻译功能
-router.get('/debug-translate', authMiddleware, async (req, res) => {
-  try {
-    var testSections = [
-      { page_number: 1, section_title: '测试', content: 'Setup: Shuffle all cards and deal 7 to each player.' },
-      { page_number: 2, section_title: '测试', content: 'On your turn, play a card matching color or number.' }
-    ];
-    var result = await translateSectionsBatch(testSections);
-    res.json({ 
-      success: true, 
-      original: testSections.map(function(s) { return s.content; }),
-      translated: result.map(function(s) { return s.content; })
-    });
-  } catch (err) {
-    res.json({ success: false, error: err.message, stack: err.stack });
   }
 });
 
