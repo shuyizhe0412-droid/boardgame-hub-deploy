@@ -152,7 +152,6 @@ async function searchRuleSections(game_id, question) {
 async function buildSystemPrompt(game, mode, userMessage, game_id) {
   const gameName = game.name;
   const gameCategory = game.category;
-  const rules_text = game.rules_text;
 
   const modeInstructions = {
     setup: '你是摆盘引导助手。根据玩家人数，一步步教他们如何摆放游戏配件。每一步只说一个动作，等玩家确认后再进行下一步。',
@@ -163,31 +162,23 @@ async function buildSystemPrompt(game, mode, userMessage, game_id) {
 
   const modeText = modeInstructions[mode] || modeInstructions.rules;
 
-  // 搜索 rule_sections 中的匹配段落
-  let ruleContext = rules_text || '';
-  if (game_id && userMessage) {
-    const matched = await searchRuleSections(game_id, userMessage);
-    if (matched) {
-      ruleContext += matched;
-    }
-  }
+  return {
+    systemPrompt: modeText + '\n\n游戏名称：' + gameName + '（' + gameCategory + '）',
+    gameName,
+    gameCategory
+  };
+}
 
-  let sourceInstruction = '';
-  if (ruleContext.indexOf('【规则书引用】') !== -1) {
-    sourceInstruction = '\n【重要】你的每个回答段落，如果引用了规则书内容，必须以"根据规则书第X页"开头标注页码。不标注页码的回答视为不合格。';
-  }
+// 构建带规则书引用的用户消息
+async function buildUserMessage(originalQuestion, game_id) {
+  const matched = await searchRuleSections(game_id, originalQuestion);
+  if (!matched) return originalQuestion;
 
-  if (ruleContext && ruleContext.trim() !== '') {
-    return modeText + '\n\n' +
-      '你要严格基于以下规则内容回答。回复格式要求：每个涉及规则的点，开头必须写"根据规则书第X页"。' + sourceInstruction + '\n\n' +
-      '游戏名称：' + gameName + '\n' +
-      '规则内容：\n' + ruleContext;
-  } else {
-    return modeText + '\n\n' +
-      '游戏名称：「' + gameName + '」，分类：「' + gameCategory + '」。\n' +
-      '你没有官方规则文本，基于通用知识回答。\n' +
-      '每个回答末尾加：⚠️ 以上为AI通用回答，未参考官方规则，实际请以说明书为准。';
-  }
+  return '【用户问题】' + originalQuestion + '\n\n' +
+    '【规则书内容 - 你必须基于以下内容回答，每个事实后标注页码】\n' +
+    matched + '\n\n' +
+    '【格式要求】每个涉及规则的点，必须标注来源，例如：\n' +
+    '"根据规则书第X页，..." 或 "（第X页）"。不标注页码的回答无效。';
 }
 
 // ==================== 流式接口 ====================
@@ -205,7 +196,8 @@ router.post('/ask-stream', async (req, res) => {
       if (found) game = found;
     }
 
-    const systemPrompt = await buildSystemPrompt(game, mode || 'rules', question, game_id);
+    const { systemPrompt } = await buildSystemPrompt(game, mode || 'rules', question, game_id);
+    const userMessage = await buildUserMessage(question, game_id);
 
     // 构建消息列表（支持多轮）
     const messages = [{ role: 'system', content: systemPrompt }];
@@ -217,7 +209,7 @@ router.post('/ask-stream', async (req, res) => {
       }
     }
 
-    messages.push({ role: 'user', content: question });
+    messages.push({ role: 'user', content: userMessage });
 
     console.log('[AI-STREAM] game:', game.name, '| mode:', mode || 'rules', '| history:', (history || []).length, '轮');
 
@@ -271,13 +263,14 @@ router.post('/ask', async (req, res) => {
       return res.status(404).json({ error: '游戏不存在' });
     }
 
-    const systemPrompt = await buildSystemPrompt(game, 'rules', question, game_id);
+    const { systemPrompt } = await buildSystemPrompt(game, 'rules', question, game_id);
+    const userMessage = await buildUserMessage(question, game_id);
 
     const completion = await getOpenAI().chat.completions.create({
       model: 'deepseek-chat',
       messages: [
         { role: 'system', content: systemPrompt },
-        { role: 'user', content: question }
+        { role: 'user', content: userMessage }
       ],
       max_tokens: 500,
       temperature: 0.7
