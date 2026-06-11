@@ -174,12 +174,12 @@ async function buildSystemPrompt(game, mode, userMessage, game_id) {
 
   let sourceInstruction = '';
   if (ruleContext.indexOf('【规则书引用】') !== -1) {
-    sourceInstruction = '\n如果提供了【规则书引用】，你的回答必须基于这些内容，并标注来源如"根据规则书第X页..."。如果规则书内容不足以回答问题，明确说明"规则书中未找到相关内容"。';
+    sourceInstruction = '\n【重要】你的每个回答段落，如果引用了规则书内容，必须以"根据规则书第X页"开头标注页码。不标注页码的回答视为不合格。';
   }
 
   if (ruleContext && ruleContext.trim() !== '') {
     return modeText + '\n\n' +
-      '严格基于以下规则内容回答。如果规则中没有提到，回答"这部分规则中没有记录，建议查阅官方规则书"。' + sourceInstruction + '\n\n' +
+      '你要严格基于以下规则内容回答。回复格式要求：每个涉及规则的点，开头必须写"根据规则书第X页"。' + sourceInstruction + '\n\n' +
       '游戏名称：' + gameName + '\n' +
       '规则内容：\n' + ruleContext;
   } else {
