@@ -147,10 +147,21 @@ async function ocrImage(filePath, mimeType) {
 
 // 解析 PDF 文本
 async function extractPdfText(filePath) {
-  const pdfParseLib = require('pdf-parse');
-  const pdfParse = pdfParseLib.default || pdfParseLib;
+  const pdfParseModule = require('pdf-parse');
   const dataBuffer = fs.readFileSync(filePath);
-  const data = await pdfParse(dataBuffer);
+
+  // pdf-parse v2.x: 导出 { PDFParse: class, ... }
+  if (pdfParseModule.PDFParse) {
+    const pdf = new pdfParseModule.PDFParse({ data: dataBuffer });
+    const result = await pdf.getText();
+    return {
+      text: result.text || '',
+      numPages: result.total || 1
+    };
+  }
+
+  // pdf-parse v1.x: module.exports 直接是函数
+  const data = await pdfParseModule(dataBuffer);
   return {
     text: data.text || '',
     numPages: data.numpages || 1
