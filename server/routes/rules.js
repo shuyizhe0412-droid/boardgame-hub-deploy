@@ -168,6 +168,48 @@ async function extractPdfText(filePath) {
   };
 }
 
+// 批量翻译规则段落为中文（保留【第X页】标记）
+async function translateSectionsBatch(sections) {
+  try {
+    var combined = sections.map(function(s) {
+      return '【第' + s.page_number + '页】' + (s.section_title ? '「' + s.section_title + '」' : '') + '\n' + s.content;
+    }).join('\n\n---\n\n');
+
+    var client = getDeepSeek();
+    var resp = await client.chat.completions.create({
+      model: 'deepseek-chat',
+      temperature: 0.1,
+      messages: [{
+        role: 'system',
+        content: '你是专业桌游规则翻译。要求：\n1. 严格逐段翻译，保留【第X页】标记\n2. 用 --- 分隔各段落\n3. 桌游专有名词保留原文（如卡牌名、角色名）\n4. 数字、符号原样保留\n5. 只输出翻译结果，不加解释'
+      }, {
+        role: 'user',
+        content: '翻译以下桌游规则书为中文：\n\n' + combined
+      }],
+      max_tokens: Math.min(combined.length * 3, 16000)
+    });
+
+    var translated = resp.choices[0].message.content;
+    console.log('[RULES] 翻译完成 | 原文:', combined.length, '字 | 译文:', translated.length, '字');
+
+    var parts = translated.split(/\n---+\n|(?=【第\d+页】)/).filter(function(p) { return p.trim(); });
+    if (parts.length !== sections.length) {
+      console.warn('[RULES] 翻译段落数不匹配:', parts.length, 'vs', sections.length, '，使用原文');
+      return sections;
+    }
+
+    return sections.map(function(s, i) {
+      var tc = parts[i].replace(/^【第\d+页】[^\n]*\n?/, '').trim();
+      if (!tc || tc.length < 5) return s;
+      return { page_number: s.page_number, section_title: s.section_title, content: tc.substring(0, 10000) };
+    });
+  } catch (err) {
+    console.warn('[RULES] 翻译失败使用原文:', err.message);
+    return sections;
+  }
+}
+
+
 // ==================== 路由 ====================
 
 // POST /api/rules/upload - 上传规则书文件
