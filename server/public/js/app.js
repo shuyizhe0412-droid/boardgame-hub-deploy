@@ -293,7 +293,8 @@ async function loadRuleSections(gameId) {
       el.innerHTML = '<p class="text-muted">尚未上传规则书，点击「上传并解析」</p>';
       return;
     }
-    var html = '<div class="rule-sections-count">已提取 <b>' + sections.length + '</b> 段规则</div>';
+    var html = '<div class="rule-sections-count">已提取 <b>' + sections.length + '</b> 段规则' +
+      ' <button class="btn btn-sm btn-outline-danger" onclick="clearAllRuleSections(\'' + gameId + '\')" style="margin-left:8px">🗑 清空全部</button></div>';
     html += '<div class="rule-sections-list-scroll">';
     sections.forEach(function(s) {
       html += '<div class="rule-section-item">' +
@@ -355,6 +356,17 @@ async function deleteRuleSection(sectionId) {
     await apiFetch('/rules/section/' + encodeURIComponent(sectionId), { method: 'DELETE' });
     showToast('删除成功');
     loadRuleSections(currentGameId);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function clearAllRuleSections(gameId) {
+  if (!confirm('确定清空该游戏的全部规则段落吗？此操作不可撤销！')) return;
+  try {
+    await apiFetch('/rules/game/' + encodeURIComponent(gameId), { method: 'DELETE' });
+    showToast('已清空全部规则段落');
+    loadRuleSections(gameId);
   } catch (err) {
     showToast(err.message, 'error');
   }
@@ -533,6 +545,7 @@ function initUploadModal() {
  $('#upload-modal').style.display = 'none';
  $('#upload-file-input').value = '';
  loadGameFiles(currentGameId);
+ loadRuleSections(currentGameId);
  } catch (err) {
  showToast('上传失败', 'error');
  }

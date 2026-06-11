@@ -232,8 +232,16 @@ router.post('/upload', authMiddleware, (req, res) => {
         }
 
         if (sections.length > 0) {
+          // AI 翻译为中文
+          var pdfSections = sections;
+          try {
+            console.log('[RULES] PDF翻译开始，共', sections.length, '段...');
+            pdfSections = await translateSectionsBatch(sections);
+          } catch (e) {
+            console.warn('[RULES] PDF翻译跳过:', e.message);
+          }
           // 存入数据库
-          const toInsert = sections.map(s => ({
+          const toInsert = pdfSections.map(s => ({
             id: uuidv4(),
             game_id,
             page_number: s.page_number,
@@ -416,6 +424,37 @@ router.delete('/section/:sectionId', authMiddleware, async (req, res) => {
   } catch (err) {
     console.error('[RULES] 删除失败:', err.message);
     res.status(500).json({ error: '删除失败' });
+  }
+});
+
+// DELETE /api/rules/game/:gameId - 清空某游戏所有规则段落（需认证）
+router.delete('/game/:gameId', authMiddleware, async (req, res) => {
+  try {
+    // 验证游戏所有权
+    const { data: gameArr, error: gErr } = await supabase
+      .from('store_games')
+      .select('id')
+      .eq('id', req.params.gameId)
+      .eq('store_id', req.store.id)
+      .limit(1);
+
+    if (gErr) throw gErr;
+    if (!gameArr || gameArr.length === 0) {
+      return res.status(404).json({ error: '游戏不存在或无权限' });
+    }
+
+    const { error: delErr } = await supabase
+      .from('rule_sections')
+      .delete()
+      .eq('game_id', req.params.gameId);
+
+    if (delErr) throw delErr;
+
+    console.log('[RULES] 已清空游戏规则段落:', req.params.gameId);
+    res.json({ message: '已清空所有规则段落' });
+  } catch (err) {
+    console.error('[RULES] 清空失败:', err.message);
+    res.status(500).json({ error: '清空失败' });
   }
 });
 
