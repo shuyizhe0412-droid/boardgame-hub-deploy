@@ -276,7 +276,7 @@ router.post('/upload', authMiddleware, (req, res) => {
         if (sections.length > 0) {
           // 先清空旧规则段落
           const { error: clearPdfErr } = await supabase.from('rule_sections').delete().eq('game_id', game_id);
-          if (clearPdfErr) console.warn('[RULES] PDF清空旧段落警告:', clearPdfErr.message);
+          if (clearPdfErr) throw clearPdfErr;
           
           // AI 翻译为中文
           var pdfSections = await translateSectionsBatch(sections);
@@ -322,7 +322,7 @@ router.post('/upload', authMiddleware, (req, res) => {
 
       // 先清空旧规则段落，避免叠加
       const { error: clearErr } = await supabase.from('rule_sections').delete().eq('game_id', game_id);
-      if (clearErr) console.warn('[RULES] 清空旧段落警告:', clearErr.message);
+      if (clearErr) throw clearErr;
 
       // AI翻译为中文
       var finalSections = await translateSectionsBatch(sections);
