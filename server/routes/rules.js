@@ -323,12 +323,7 @@ router.post('/upload', authMiddleware, (req, res) => {
       const sourceType = mimeType.startsWith('image/') ? 'image_ocr' : 'text';
 
       // AI翻译为中文
-      var finalSections = sections;
-      try {
-        finalSections = await translateSectionsBatch(sections);
-      } catch (e) {
-        console.warn('[RULES] 文本翻译跳过:', e.message);
-      }
+      var finalSections = await translateSectionsBatch(sections);
 
       const toInsert = finalSections.map(s => ({
         id: uuidv4(),
