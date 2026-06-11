@@ -322,7 +322,15 @@ router.post('/upload', authMiddleware, (req, res) => {
 
       const sourceType = mimeType.startsWith('image/') ? 'image_ocr' : 'text';
 
-      const toInsert = sections.map(s => ({
+      // AI翻译为中文
+      var finalSections = sections;
+      try {
+        finalSections = await translateSectionsBatch(sections);
+      } catch (e) {
+        console.warn('[RULES] 文本翻译跳过:', e.message);
+      }
+
+      const toInsert = finalSections.map(s => ({
         id: uuidv4(),
         game_id,
         page_number: s.page_number,
