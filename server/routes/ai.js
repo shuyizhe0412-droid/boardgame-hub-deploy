@@ -153,10 +153,11 @@ async function buildSystemPrompt(game, mode, userMessage, game_id) {
   const gameName = game.name;
   const gameCategory = game.category;
 
+  const citeNote = '\n【重要】回答规则类问题时必须标注页码来源，格式："（根据规则书第X页）"。';
   const modeInstructions = {
     setup: '你是摆盘引导助手。根据玩家人数，一步步教他们如何摆放游戏配件。每一步只说一个动作，等玩家确认后再进行下一步。',
-    rules: '你是规则教学助手。系统地讲解游戏规则，从基础开始，循序渐进。每个知识点讲完后确认玩家是否理解。',
-    faq: '你是规则速查助手。快速准确地回答玩家的具体规则问题，回答要简洁直接。',
+    rules: '你是规则教学助手。系统地讲解游戏规则，从基础开始，循序渐进。每个知识点讲完后确认玩家是否理解。' + citeNote,
+    faq: '你是规则速查助手。快速准确地回答玩家的具体规则问题，回答要简洁直接。' + citeNote,
     recommend: '你是桌游推荐助手。根据玩家的人数、时间、喜好推荐合适的游戏。'
   };
 
@@ -172,13 +173,25 @@ async function buildSystemPrompt(game, mode, userMessage, game_id) {
 // 构建带规则书引用的用户消息
 async function buildUserMessage(originalQuestion, game_id) {
   const matched = await searchRuleSections(game_id, originalQuestion);
-  if (!matched) return originalQuestion;
 
-  return '【用户问题】' + originalQuestion + '\n\n' +
-    '【规则书内容 - 你必须基于以下内容回答，每个事实后标注页码】\n' +
-    matched + '\n\n' +
-    '【格式要求】每个涉及规则的点，必须标注来源，例如：\n' +
-    '"根据规则书第X页，..." 或 "（第X页）"。不标注页码的回答无效。';
+  // 强制引用指令（放最前面，deepseek-chat 才不容易忽略）
+  const citeRule = '【重要：你必须严格标注来源！】\n' +
+    '回答中每个涉及游戏规则的陈述，后面必须标注页码来源，格式如：\n' +
+    '"（根据规则书第X页）" 或 "（第X页）"。\n' +
+    '不标注页码的回答视为无效。\n\n';
+
+  if (!matched) {
+    // 无规则书：提醒AI基于知识回答并声明
+    return citeRule +
+      '【用户问题】' + originalQuestion + '\n\n' +
+      '【注意】此游戏暂无规则书内容。请基于你的知识回答，' +
+      '并在开头注明"（以下回答基于AI知识，非规则书原文）"。';
+  }
+
+  return citeRule +
+    '【用户问题】' + originalQuestion + '\n\n' +
+    '【规则书内容 - 你必须严格基于以下内容回答】\n' +
+    matched;
 }
 
 // ==================== 流式接口 ====================
