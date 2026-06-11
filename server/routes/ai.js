@@ -130,7 +130,14 @@ async function searchRuleSections(game_id, question) {
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
 
-    if (scored.length === 0) return null;
+    if (scored.length === 0) {
+      // 关键词无匹配：兜底返回前3段，确保中文提问也能获得规则上下文
+      const fallback = sections.slice(0, 3);
+      if (fallback.length === 0) return null;
+      return '\n\n【规则书引用】（关键词未匹配，提供前几页供参考）\n' + fallback.map(s =>
+        '第' + s.page_number + '页' + (s.section_title ? '「' + s.section_title + '」' : '') + '：' + s.content
+      ).join('\n\n');
+    }
 
     return '\n\n【规则书引用】\n' + scored.map(s =>
       '第' + s.page_number + '页' + (s.section_title ? '「' + s.section_title + '」' : '') + '：' + s.content
