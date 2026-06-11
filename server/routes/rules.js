@@ -274,14 +274,11 @@ router.post('/upload', authMiddleware, (req, res) => {
         }
 
         if (sections.length > 0) {
+          // 先清空旧规则段落
+          await supabase.from('rule_sections').delete().eq('game_id', game_id);
+          
           // AI 翻译为中文
-          var pdfSections = sections;
-          try {
-            console.log('[RULES] PDF翻译开始，共', sections.length, '段...');
-            pdfSections = await translateSectionsBatch(sections);
-          } catch (e) {
-            console.warn('[RULES] PDF翻译跳过:', e.message);
-          }
+          var pdfSections = await translateSectionsBatch(sections);
           // 存入数据库
           const toInsert = pdfSections.map(s => ({
             id: uuidv4(),
@@ -321,6 +318,9 @@ router.post('/upload', authMiddleware, (req, res) => {
       }
 
       const sourceType = mimeType.startsWith('image/') ? 'image_ocr' : 'text';
+
+      // 先清空旧规则段落，避免叠加
+      await supabase.from('rule_sections').delete().eq('game_id', game_id);
 
       // AI翻译为中文
       var finalSections = await translateSectionsBatch(sections);
