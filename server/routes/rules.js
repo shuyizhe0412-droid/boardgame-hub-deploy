@@ -432,6 +432,62 @@ router.get('/debug-translate', authMiddleware, async (req, res) => {
 });
 
 // GET /api/rules/:gameId - 获取某游戏所有规则段落（公开）
+
+// PATCH /api/rules/section/:sectionId - 更新单个规则段落
+router.patch('/section/:sectionId', authMiddleware, async (req, res) => {
+  try {
+    const { page_number, section_title, content } = req.body;
+    
+    // 验证段落存在 + 所有权
+    const { data: sectionArr, error: findErr } = await supabase
+      .from('rule_sections')
+      .select('game_id')
+      .eq('id', req.params.sectionId)
+      .limit(1);
+    
+    if (findErr) throw findErr;
+    if (!sectionArr || sectionArr.length === 0) {
+      return res.status(404).json({ error: '规则段落不存在' });
+    }
+    
+    // 验证游戏所有权
+    const { data: gameArr, error: gErr } = await supabase
+      .from('store_games')
+      .select('id')
+      .eq('id', sectionArr[0].game_id)
+      .eq('store_id', req.store.id)
+      .limit(1);
+    
+    if (gErr) throw gErr;
+    if (!gameArr || gameArr.length === 0) {
+      return res.status(403).json({ error: '无权限修改' });
+    }
+    
+    // 构建更新字段（只更新传入的）
+    const updates = {};
+    if (page_number !== undefined) updates.page_number = page_number;
+    if (section_title !== undefined) updates.section_title = section_title;
+    if (content !== undefined) updates.content = content;
+    
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: '没有要更新的字段' });
+    }
+    
+    const { error: updErr } = await supabase
+      .from('rule_sections')
+      .update(updates)
+      .eq('id', req.params.sectionId);
+    
+    if (updErr) throw updErr;
+    
+    console.log('[RULES] 规则段落已更新:', req.params.sectionId);
+    res.json({ message: '更新成功' });
+  } catch (err) {
+    console.error('[RULES] 更新失败:', err.message);
+    res.status(500).json({ error: '更新失败' });
+  }
+});
+
 router.get('/:gameId', async (req, res) => {
   try {
     const { data: sections, error } = await supabase

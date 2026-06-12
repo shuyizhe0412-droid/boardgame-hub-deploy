@@ -159,19 +159,10 @@
  <div id="detail-tags" class="tags"></div>
  </div>
 
- <div class="detail-section-card">
- <div class="section-title-row">
- <h3>📄 规则书</h3>
- <button id="upload-rulebook-btn" class="btn btn-outline btn-sm">上传</button>
- </div>
- <div id="detail-files" class="files-list">
- <p class="text-muted">暂无规则书文件</p>
- </div>
- </div>
 
  <div class="detail-section-card">
  <div class="section-title-row">
- <h3>🤖 规则书智能解析</h3>
+ <h3>📄 规则书</h3>
  <button id="upload-rules-btn" class="btn btn-primary btn-sm">上传并解析</button>
  </div>
  <div id="detail-rule-sections" class="rule-sections-list">
@@ -268,50 +259,24 @@
  </div>
  </div>
 
- <!-- ======== 弹窗：上传规则书 ======== -->
- <div id="upload-modal" class="modal-overlay" style="display:none">
- <div class="modal modal-sm">
- <div class="modal-header">
- <h3>上传规则书</h3>
- <button class="modal-close" id="upload-modal-close-btn">&times;</button>
- </div>
- <form id="upload-form" class="modal-body">
- <div class="form-group">
- <label>选择文件</label>
- <div class="file-input-wrapper">
- <input type="file" id="upload-file-input" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.md" required>
- <span class="file-hint">支持 PDF、PNG、JPG、TXT、MD 格式</span>
- </div>
- </div>
- <div class="modal-footer">
- <button type="button" class="btn btn-ghost" id="upload-cancel-btn">取消</button>
- <button type="submit" class="btn btn-primary">上传</button>
- </div>
- </form>
- </div>
- </div>
- </div>
-
- <!-- ======== 弹窗：编辑规则 ======== -->
- <div id="rules-modal" class="modal-overlay" style="display:none">
- <div class="modal">
- <div class="modal-header">
- <h3>编辑规则</h3>
- <button class="modal-close" id="rules-modal-close-btn">&times;</button>
- </div>
- <div class="modal-body">
- <div class="form-group">
- <label class="rules-label">规则摘要</label>
- <textarea id="rules-textarea" rows="12" placeholder="请输入规则摘要..."></textarea>
- </div>
- </div>
- <div class="modal-footer">
- <button type="button" class="btn btn-ghost" id="rules-modal-cancel-btn">取消</button>
- <button type="button" class="btn btn-primary" id="rules-modal-save-btn">保存</button>
- </div>
- </div>
- </div>
-
+  <!-- ======== 弹窗：编辑规则段落 ======== -->
+  <div id="rules-modal" class="modal-overlay" style="display:none">
+  <div class="modal modal-lg">
+  <div class="modal-header">
+  <h3>编辑规则段落</h3>
+  <button class="modal-close" id="rules-modal-close-btn">&times;</button>
+  </div>
+  <div class="modal-body">
+  <div id="rule-sections-editor">
+  <p class="text-muted">加载中...</p>
+  </div>
+  </div>
+  <div class="modal-footer">
+  <button type="button" class="btn btn-ghost" id="rules-modal-cancel-btn">取消</button>
+  <button type="button" class="btn btn-primary" id="rules-modal-save-btn">保存全部</button>
+  </div>
+  </div>
+  </div>
 
  <!-- ======== 弹窗：批量二维码 ======== -->
  <div id="batch-qr-modal" class="modal-overlay" style="display:none">

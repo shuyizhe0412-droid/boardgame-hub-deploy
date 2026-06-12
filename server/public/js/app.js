@@ -653,7 +653,7 @@ function logout() {
 
 function openRulesModal() {
   document.body.style.overflow = 'hidden';
-  loadExistingRules();
+  loadRuleSectionsForEditor();
   $('#rules-modal').style.display = '';
 }
 
@@ -662,13 +662,45 @@ function closeRulesModal() {
   $('#rules-modal').style.display = 'none';
 }
 
-async function loadExistingRules() {
+async function loadRuleSectionsForEditor() {
+  var el = document.getElementById('rule-sections-editor');
+  if (!el) return;
+  el.innerHTML = '<p class="text-muted">加载中...</p>';
+  
   try {
-    const data = await apiFetch(`/games/${currentGameId}/rules`);
-    $('#rules-textarea').value = data.rules_text || '';
+    var data = await apiFetch('/rules/' + encodeURIComponent(currentGameId));
+    var sections = (data && data.sections) || [];
+    
+    if (sections.length === 0) {
+      el.innerHTML = '<p class="text-muted">暂无规则段落，请先上传规则书</p>';
+      return;
+    }
+    
+    var html = '';
+    sections.forEach(function(s, idx) {
+      html += '<div class="rule-editor-item" data-section-id="' + s.id + '">' +
+        '<div class="rule-editor-header">' +
+        '<span class="rule-editor-index">#' + (idx + 1) + '</span>' +
+        '<label>页码:</label>' +
+        '<input type="number" class="rule-editor-page" value="' + s.page_number + '" min="1" style="width:60px">' +
+        '<label>标题:</label>' +
+        '<input type="text" class="rule-editor-title" value="' + (s.section_title || '').replace(/"/g, '&quot;') + '" style="flex:1">' +
+        '<button class="btn btn-sm btn-danger rule-editor-del" onclick="deleteRuleSection(\'' + s.id + '\')">✕</button>' +
+        '</div>' +
+        '<textarea class="rule-editor-content" rows="4">' + (s.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</textarea>' +
+        '</div>';
+    });
+    el.innerHTML = html;
   } catch (err) {
-    showToast(err.message, 'error');
+    el.innerHTML = '<p class="text-muted" style="color:#e74c3c">加载失败: ' + err.message + '</p>';
   }
+}
+
+async function saveRuleSection(sectionId, pageNum, title, content) {
+  return await apiFetch('/rules/section/' + encodeURIComponent(sectionId), {
+    method: 'PATCH',
+    body: { page_number: pageNum, section_title: title, content: content }
+  });
 }
 
 function initRulesModal() {
@@ -683,15 +715,44 @@ function initRulesModal() {
   });
 
   $('#rules-modal-save-btn').addEventListener('click', async () => {
-    try {
-      await apiFetch(`/games/${currentGameId}/rules`, {
-        method: 'PUT',
-        body: { rules_text: $('#rules-textarea').value }
-      });
-      showToast('规则保存成功');
+    var items = document.querySelectorAll('.rule-editor-item');
+    if (items.length === 0) {
+      showToast('没有可保存的段落', 'error');
+      return;
+    }
+    
+    var saveBtn = $('#rules-modal-save-btn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中...';
+    
+    var saved = 0;
+    var failed = 0;
+    
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      var sectionId = item.getAttribute('data-section-id');
+      var pageNum = parseInt(item.querySelector('.rule-editor-page').value) || 1;
+      var title = item.querySelector('.rule-editor-title').value.trim();
+      var content = item.querySelector('.rule-editor-content').value.trim();
+      
+      try {
+        await saveRuleSection(sectionId, pageNum, title, content);
+        saved++;
+      } catch (err) {
+        failed++;
+        console.error('保存段落失败:', sectionId, err);
+      }
+    }
+    
+    saveBtn.disabled = false;
+    saveBtn.textContent = '保存全部';
+    
+    if (failed === 0) {
+      showToast('✅ 已保存 ' + saved + ' 段规则');
       closeRulesModal();
-    } catch (err) {
-      showToast(err.message, 'error');
+      loadRuleSections(currentGameId);
+    } else {
+      showToast('保存 ' + saved + ' 段，' + failed + ' 段失败', 'error');
     }
   });
 }
