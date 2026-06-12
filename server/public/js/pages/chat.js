@@ -730,7 +730,7 @@ App.registerPage('chat', (function() {
         document.body.appendChild(popup);
         
         // 异步加载内容
-        fetch(API_BASE + '/rules/' + encodeURIComponent(gameId))
+        fetch(API_BASE_URL + '/rules/' + encodeURIComponent(gameId))
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 var sections = (data && data.sections) || [];

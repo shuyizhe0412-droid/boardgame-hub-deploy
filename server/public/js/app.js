@@ -287,7 +287,7 @@ async function loadRuleSections(gameId) {
   var el = document.getElementById('detail-rule-sections');
   if (!el) return;
   try {
-    var data = await apiFetch('/rules/' + encodeURIComponent(gameId));
+    var data = await apiFetch('/api/rules/' + encodeURIComponent(gameId));
     var sections = (data && data.sections) || [];
     if (sections.length === 0) {
       el.innerHTML = '<p class="text-muted">尚未上传规则书，点击「上传并解析」</p>';
@@ -353,7 +353,7 @@ async function handleRulesFileSelected(e) {
 async function deleteRuleSection(sectionId) {
   if (!confirm('确定要删除这条规则段落吗？')) return;
   try {
-    await apiFetch('/rules/section/' + encodeURIComponent(sectionId), { method: 'DELETE' });
+    await apiFetch('/api/rules/section/' + encodeURIComponent(sectionId), { method: 'DELETE' });
     showToast('删除成功');
     loadRuleSections(currentGameId);
   } catch (err) {
@@ -364,7 +364,7 @@ async function deleteRuleSection(sectionId) {
 async function clearAllRuleSections(gameId) {
   if (!confirm('确定清空该游戏的全部规则段落吗？此操作不可撤销！')) return;
   try {
-    await apiFetch('/rules/game/' + encodeURIComponent(gameId), { method: 'DELETE' });
+    await apiFetch('/api/rules/game/' + encodeURIComponent(gameId), { method: 'DELETE' });
     showToast('已清空全部规则段落');
     loadRuleSections(gameId);
   } catch (err) {
@@ -629,7 +629,7 @@ async function loadRuleSectionsForEditor() {
   el.innerHTML = '<p class="text-muted">加载中...</p>';
   
   try {
-    var data = await apiFetch('/rules/' + encodeURIComponent(currentGameId));
+    var data = await apiFetch('/api/rules/' + encodeURIComponent(currentGameId));
     var sections = (data && data.sections) || [];
     
     if (sections.length === 0) {
@@ -658,7 +658,7 @@ async function loadRuleSectionsForEditor() {
 }
 
 async function saveRuleSection(sectionId, pageNum, title, content) {
-  return await apiFetch('/rules/section/' + encodeURIComponent(sectionId), {
+  return await apiFetch('/api/rules/section/' + encodeURIComponent(sectionId), {
     method: 'PATCH',
     body: { page_number: pageNum, section_title: title, content: content }
   });
