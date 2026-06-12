@@ -509,49 +509,10 @@ function initGameModal() {
  });
 }
 
-// ============ 上传规则书 ============
+// ============ 封面上传 ============
 
-function initUploadModal() {
- $('#upload-rulebook-btn').addEventListener('click', () => {
- $('#upload-modal').style.display = '';
- });
-
- $('#upload-modal-close-btn').addEventListener('click', () => {
- $('#upload-modal').style.display = 'none';
- });
- $('#upload-cancel-btn').addEventListener('click', () => {
- $('#upload-modal').style.display = 'none';
- });
- $('#upload-modal').addEventListener('click', (e) => {
- if (e.target === $('#upload-modal')) $('#upload-modal').style.display = 'none';
- });
-
- $('#upload-form').addEventListener('submit', async (e) => {
- e.preventDefault();
- const file = $('#upload-file-input').files[0];
- if (!file) return;
-
- try {
- const fd = new FormData();
- fd.append('file', file);
- fd.append('game_id', currentGameId);
- await fetch(`${API}/upload`, {
- method: 'POST',
- headers: { 'Authorization': `Bearer ${currentToken}` },
- body: fd
- }).then(r => r.json());
-
- showToast('上传成功');
- $('#upload-modal').style.display = 'none';
- $('#upload-file-input').value = '';
- loadGameFiles(currentGameId);
- loadRuleSections(currentGameId);
- } catch (err) {
- showToast('上传失败', 'error');
- }
- });
-
- // 封面上传
+function initCoverUpload() {
+  // 封面上传
  $('#upload-cover-btn').addEventListener('click', () => {
  $('#cover-file-input').click();
  });
@@ -1105,7 +1066,7 @@ function initStoreQrModal() {
 async function init() {
   initAuth();
   initGameModal();
-  initUploadModal();
+  initCoverUpload();
   initDelete();
   initNavigation();
 
