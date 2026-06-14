@@ -132,8 +132,8 @@ App.registerPage('detail', (function() {
         var tags = game.tags || [];
 
         return '<div class="detail-info card">' +
-            '<h1 class="detail-title">' + (game.name || '未知游戏') + '</h1>' +
-            '<p class="detail-subtitle">' + (game.name_en || game.nameEn || '') + '</p>' +
+            '<h1 class="detail-title">' + (game.name_cn || game.name || '未知游戏') + '</h1>' +
+            '<p class="detail-subtitle">' + ((game.name_cn && game.name && game.name !== game.name_cn) ? game.name : '') + '</p>' +
             '<div class="detail-stats">' +
             '<div class="detail-stat"><span>👥</span><span>' + minPlayers + '-' + maxPlayers + '人</span></div>' +
             '<div class="detail-stat"><span>⏱️</span><span>' + formatDuration(duration) + '</span></div>' +

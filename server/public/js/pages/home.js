@@ -231,7 +231,7 @@ App.registerPage('home', (function() {
             coverHtml +
             '</div>' +
             '<div class="game-card-info">' +
-            '<div class="game-card-name">' + (game.name || '未知游戏') + '</div>' +
+            '<div class="game-card-name">' + (game.name_cn || game.name || '未知游戏') + '</div>' +
             '<div class="game-card-meta">' + formatInfo(game) + '</div>' +
             '<div class="game-card-stars">' + getDifficultyStars(game.difficulty) + '</div>' +
             '</div>' +
