@@ -870,7 +870,7 @@ function renderLibraryPage() {
             '<span>' + stars + '</span>' +
           '</div>' +
           '<div class="library-game-tags">' + (g.tags ? g.tags.split(',').map(function (t) { return '<span class="tag">' + escapeHtml(t.trim()) + '</span>'; }).join('') : '') + '</div>' +
-          '<div class="library-game-desc">' + escapeHtml((g.description || '').slice(0, 60)) + '</div>' +
+          '<div class="library-game-desc">' + escapeHtml((g.description || '').slice(0, 200)) + '</div>' +
         '</div>' +
       '</div>'
     );
