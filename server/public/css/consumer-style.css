@@ -488,6 +488,8 @@ input:focus, textarea:focus {
 .detail-cover-img {
     width: 100%;
     height: auto;
+    max-height: 240px;
+    object-fit: contain;
     display: block;
     border-radius: 0 0 12px 12px;
 }

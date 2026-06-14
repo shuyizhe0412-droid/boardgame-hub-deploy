@@ -109,6 +109,11 @@ router.get('/game/:bggId', auth, async (req, res) => {
       rank: stats.ranks?.[0]?.rank?.find(r => r.$.name === 'boardgame')?.$.value || ''
     };
 
+    // 翻译游戏名
+    const translated = await translateGameNames([result]);
+    if (translated.length && translated[0].name_cn) {
+      result.name_cn = translated[0].name_cn;
+    }
     setCache(cacheKey, result);
     res.json(result);
   } catch (err) {
