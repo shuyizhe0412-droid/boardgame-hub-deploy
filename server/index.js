@@ -105,6 +105,7 @@ app.use(`/api/ai/ask`, aiLimiter);
 app.use(`/api/`, generalLimiter); // 兜底：所有 API 30次/分钟
 
 app.use(`/api/auth`, require(`./routes/auth`));
+app.use(`/api/bgg`, require(`./routes/bgg`));
 app.use(`/api/games`, require(`./routes/games`));
 app.use(`/api/upload`, require(`./routes/upload`));
 app.use(`/api/admin`, require(`./routes/admin`));

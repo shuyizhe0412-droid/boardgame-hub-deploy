@@ -80,7 +80,9 @@
               <button id="batch-library-btn" class="btn btn-outline">📚 从游戏库添加</button>
               <button id="store-qr-btn" class="btn btn-outline">📱 店铺入口码</button>
               <button id="batch-qr-btn" class="btn btn-outline">📱 批量二维码</button>
+              <button id="bgg-import-open-btn" class="btn btn-secondary">从BGG导入</button>
               <button id="add-game-btn" class="btn btn-primary">+ 添加桌游</button>
+        <button id="bgg-import-open-btn" class="btn btn-secondary" onclick="openBggModal()">📥 从BGG导入</button>
             </div>
  </div>
 
@@ -370,5 +372,30 @@
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
 <script src="/js/batch-qr.js"></script>
+
+<!-- BGG导入弹窗 -->
+<div id="bgg-modal" class="modal-overlay" style="display:none;">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3>从BGG导入游戏</h3>
+      <button class="modal-close" id="bgg-modal-close-btn">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="bgg-search-bar">
+        <input type="text" id="bgg-search-input" placeholder="输入游戏名称搜索BGG..."
+               onkeydown="if(event.key==='Enter')searchBgg()">
+        <button id="bgg-search-btn" onclick="searchBgg()">搜索</button>
+      </div>
+      <div id="bgg-search-status" class="bgg-status"></div>
+      <div id="bgg-search-results" class="bgg-results-list"></div>
+      <div id="bgg-game-detail" class="bgg-detail" style="display:none;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="bgg-cancel-btn">取消</button>
+      <button id="bgg-import-btn" class="btn btn-primary" style="display:none;"
+              onclick="importFromBgg()">导入游戏</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

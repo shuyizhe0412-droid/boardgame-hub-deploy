@@ -141,7 +141,7 @@ router.get('/:id', async (req, res) => {
 // POST /api/games - 创建游戏
 router.post('/', async (req, res) => {
   try {
-    var { name, category, description, min_players, max_players, duration, difficulty, price, stock, cover_image } = req.body;
+    var { name, category, description, min_players, max_players, duration, difficulty, price, stock, cover_image, tags, bgg_id, image_url, thumb_url } = req.body;
 
     if (!name) {
       return res.status(400).json({ error: '游戏名称为必填项' });
@@ -152,7 +152,7 @@ router.post('/', async (req, res) => {
       id,
       store_id: req.store.id,
       name,
-      category: category || '',
+      category: category || tags || '',
       description: description || '',
       min_players: parseInt(min_players) || 1,
       max_players: parseInt(max_players) || 10,
@@ -160,7 +160,10 @@ router.post('/', async (req, res) => {
       difficulty: parseInt(difficulty) || 2,
       price: parseFloat(price) || 0,
       stock: parseInt(stock) || 0,
-      cover_image: cover_image || ''
+      cover_image: cover_image || '',
+      bgg_id: bgg_id || '',
+      image_url: image_url || '',
+      thumb_url: thumb_url || ''
     }]);
 
     if (error) throw error;

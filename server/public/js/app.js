@@ -1061,6 +1061,151 @@ function initStoreQrModal() {
   $('#store-qr-download-btn').addEventListener('click', downloadStoreQr);
 }
 
+// ========== BGG导入功能 ==========
+
+let bggSelectedGame = null;
+
+function openBggModal() {
+  document.getElementById('bgg-modal').style.display = 'flex';
+  document.getElementById('bgg-search-input').value = '';
+  document.getElementById('bgg-search-results').innerHTML = '';
+  document.getElementById('bgg-search-status').innerHTML = '';
+  document.getElementById('bgg-game-detail').style.display = 'none';
+  document.getElementById('bgg-import-btn').style.display = 'none';
+  bggSelectedGame = null;
+}
+
+function closeBggModal() {
+  document.getElementById('bgg-modal').style.display = 'none';
+}
+
+async function searchBgg() {
+  const query = document.getElementById('bgg-search-input').value.trim();
+  if (!query) return;
+
+  const statusEl = document.getElementById('bgg-search-status');
+  const resultsEl = document.getElementById('bgg-search-results');
+  const searchBtn = document.getElementById('bgg-search-btn');
+
+  statusEl.textContent = '搜索中...';
+  resultsEl.innerHTML = '';
+  searchBtn.disabled = true;
+
+  try {
+    const games = await apiFetch('/bgg/search?query=' + encodeURIComponent(query));
+    if (!games || !games.length) {
+      statusEl.textContent = '未找到游戏';
+      searchBtn.disabled = false;
+      return;
+    }
+
+    statusEl.textContent = '找到 ' + games.length + ' 个游戏';
+    resultsEl.innerHTML = games.map(function(g) {
+      return '<div class="bgg-result-item" onclick="selectBggGame(\'' + g.bggId + '\')">' +
+        '<span class="bgg-result-name">' + escapeHtml(g.name) + '</span>' +
+        (g.year ? '<span class="bgg-result-year">(' + g.year + ')</span>' : '') +
+      '</div>';
+    }).join('');
+  } catch (err) {
+    statusEl.textContent = '搜索失败，请重试';
+  } finally {
+    searchBtn.disabled = false;
+  }
+}
+
+async function selectBggGame(bggId) {
+  const statusEl = document.getElementById('bgg-search-status');
+  const detailEl = document.getElementById('bgg-game-detail');
+  const importBtn = document.getElementById('bgg-import-btn');
+
+  statusEl.textContent = '加载游戏详情...';
+  detailEl.style.display = 'none';
+
+  try {
+    const game = await apiFetch('/bgg/game/' + bggId);
+    bggSelectedGame = game;
+
+    detailEl.innerHTML =
+      '<div class="bgg-detail-header">' +
+        (game.thumbnail ? '<img src="' + game.thumbnail + '" alt="' + escapeHtml(game.name) + '" class="bgg-detail-thumb">' : '') +
+        '<div>' +
+          '<h4>' + escapeHtml(game.name) + '</h4>' +
+          (game.yearPublished ? '<span class="bgg-detail-year">' + game.yearPublished + '</span>' : '') +
+          (game.rating ? '<span class="bgg-detail-rating">BGG评分: ' + game.rating + '</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="bgg-detail-meta">' +
+        (game.minPlayers ? '<span>玩家: ' + game.minPlayers + '-' + game.maxPlayers + '人</span>' : '') +
+        (game.playingTime ? '<span>时长: ' + game.playingTime + '分钟</span>' : '') +
+        (game.weight ? '<span>复杂度: ' + game.weight + '/5</span>' : '') +
+      '</div>' +
+      '<div class="bgg-detail-tags">' +
+        (game.categories || []).slice(0, 5).map(function(c) { return '<span class="bgg-tag">' + escapeHtml(c) + '</span>'; }).join('') +
+      '</div>' +
+      '<p class="bgg-detail-desc">' + (game.description || '').substring(0, 300) + (game.description && game.description.length > 300 ? '...' : '') + '</p>';
+
+    detailEl.style.display = 'block';
+    importBtn.style.display = 'inline-block';
+    statusEl.textContent = '';
+    document.getElementById('bgg-search-results').innerHTML = '';
+  } catch (err) {
+    statusEl.textContent = '加载游戏详情失败';
+  }
+}
+
+async function importFromBgg() {
+  if (!bggSelectedGame) return;
+
+  const importBtn = document.getElementById('bgg-import-btn');
+  importBtn.disabled = true;
+  importBtn.textContent = '导入中...';
+
+  try {
+    const gameData = {
+      name: bggSelectedGame.name,
+      min_players: parseInt(bggSelectedGame.minPlayers) || 1,
+      max_players: parseInt(bggSelectedGame.maxPlayers) || 4,
+      duration: parseInt(bggSelectedGame.playingTime) || 60,
+      difficulty: Math.round(parseFloat(bggSelectedGame.weight)) || 3,
+      tags: (bggSelectedGame.categories || []).slice(0, 5).join(','),
+      description: (bggSelectedGame.description || '').substring(0, 500),
+      bgg_id: bggSelectedGame.bggId,
+      image_url: bggSelectedGame.image || '',
+      thumb_url: bggSelectedGame.thumbnail || ''
+    };
+
+    await apiFetch('/games', {
+      method: 'POST',
+      body: gameData
+    });
+
+    showToast('游戏导入成功！');
+    closeBggModal();
+    loadGames();
+  } catch (err) {
+    showToast('导入失败: ' + err.message, 'error');
+  } finally {
+    importBtn.disabled = false;
+    importBtn.textContent = '导入游戏';
+  }
+}
+
+function initBggImport() {
+  var openBtn = document.getElementById('bgg-import-open-btn');
+  if (openBtn) openBtn.addEventListener('click', openBggModal);
+
+  var closeBtn = document.getElementById('bgg-modal-close-btn');
+  if (closeBtn) closeBtn.addEventListener('click', closeBggModal);
+
+  var cancelBtn = document.getElementById('bgg-cancel-btn');
+  if (cancelBtn) cancelBtn.addEventListener('click', closeBggModal);
+
+  var modal = document.getElementById('bgg-modal');
+  if (modal) modal.addEventListener('click', function(e) {
+    if (e.target === modal) closeBggModal();
+  });
+}
+
 // ============ 初始化 ============
 
 async function init() {
@@ -1075,6 +1220,7 @@ async function init() {
   initBatchLibraryModal();
   initStoreQrModal();
   initRulesUpload();
+  initBggImport();
 
   // 检查已登录状态
  currentToken = localStorage.getItem('admin_token');
