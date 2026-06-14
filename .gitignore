@@ -5,3 +5,5 @@ uploads/
 test-supabase.js
 *.log
 .DS_Store
+*.db-shm
+*.db-wal
