@@ -173,8 +173,12 @@ App.registerPage('chat', (function() {
         text = text.replace(/\*\*(.*?)\*\*/g, '[$1]');
         // 将 *XX* 替换为 [XX]（单星号也处理）
         text = text.replace(/\*(.*?)\*/g, '[$1]');
-        // HTML转义 + 换行转<br>
-        return escapeHtml(text);
+        // HTML转义
+        text = escapeHtml(text);
+        // 使引用可点击：(第X页) 和 根据规则书第X页
+        text = text.replace(/（第(\d+)页）/g, '<span class="citation-link" data-page="$1" onclick="chatPage.showCitation($1)">（第$1页）</span>');
+        text = text.replace(/根据规则书第(\d+)页/g, '<span class="citation-link" data-page="$1" onclick="chatPage.showCitation($1)">根据规则书第$1页</span>');
+        return text;
     }
 
     // ==================== 从Supabase加载游戏数据 ====================
@@ -234,18 +238,21 @@ App.registerPage('chat', (function() {
             }
         }
 
-        // 先添加一个空的 AI 消息占位
-        session.messages.push({
-            role: 'assistant',
-            content: ''
-        });
-        var aiIndex = session.messages.length - 1;
+        // 流式接收 - 先用 typing 指示器占位，收到首块内容后再添加气泡
         state.isTyping = true;
         refreshMessages();
-
-        // 流式接收
+        var aiMessageAdded = false;
+        var aiIndex = -1;
         var mode = state.currentMode || 'rules';
         window.askAIStream(state.gameId, userMessage, mode, history, function(chunk) {
+            // 首块内容到达：移除 typing 指示器，添加AI消息气泡
+            if (!aiMessageAdded) {
+                aiMessageAdded = true;
+                state.isTyping = false;
+                session.messages.push({ role: 'assistant', content: '' });
+                aiIndex = session.messages.length - 1;
+                refreshMessages();
+            }
             // 每收到一块内容，更新 AI 消息
             session.messages[aiIndex].content += chunk;
             // 更新 DOM 中的气泡
@@ -290,9 +297,34 @@ App.registerPage('chat', (function() {
                 '<div class="chat-bubble chat-bubble-user">' + escapeHtml(msg.content) + '</div>' +
                 '</div>';
         } else {
+            // 检测 AI 回复中是否包含规则书来源引用
+            var sourceFooter = '';
+            var content = msg.content || '';
+            var sourceMatch = content.match(/根据规则书第(\d+)页/g);
+            if (sourceMatch) {
+                var pages = [];
+                for (var i = 0; i < sourceMatch.length; i++) {
+                    var pm = sourceMatch[i].match(/(\d+)/);
+                    if (pm) pages.push(pm[1]);
+                }
+                // 去重
+                var uniquePages = [];
+                for (var j = 0; j < pages.length; j++) {
+                    if (uniquePages.indexOf(pages[j]) === -1) uniquePages.push(pages[j]);
+                }
+                if (uniquePages.length > 0) {
+                    sourceFooter = '<div class="chat-source-ref">' +
+                        '<span class="chat-source-icon">📖</span> 参考：' +
+                        uniquePages.map(function(p) {
+                            return '<span class="citation-link" data-page="' + p + '" onclick="chatPage.showCitation(' + p + ')">规则书第' + p + '页</span>';
+                        }).join('、') +
+                        '</div>';
+                }
+            }
             return '<div class="chat-message chat-message-ai">' +
                 '<div class="chat-avatar">🤖</div>' +
                 '<div class="chat-bubble chat-bubble-ai">' + formatAIMessage(msg.content) +
+                sourceFooter +
                 '</div>' +
                 '</div>';
         }
@@ -672,6 +704,58 @@ App.registerPage('chat', (function() {
         }, 50);
     }
 
+    // ==================== 引用弹窗 ====================
+    function showCitation(pageNum) {
+        var gameId = state.gameId;
+        if (!gameId) return;
+        
+        // 移除已有弹窗
+        var existing = document.getElementById('citation-popup');
+        if (existing) existing.remove();
+        
+        // 创建弹窗
+        var popup = document.createElement('div');
+        popup.id = 'citation-popup';
+        popup.className = 'citation-popup-overlay';
+        popup.innerHTML = '<div class="citation-popup-box">' +
+            '<div class="citation-popup-header">' +
+            '<span>📖 规则书第' + pageNum + '页</span>' +
+            '<button class="citation-popup-close" onclick="this.closest(\'.citation-popup-overlay\').remove()">✕</button>' +
+            '</div>' +
+            '<div class="citation-popup-body">加载中...</div>' +
+            '</div>';
+        popup.addEventListener('click', function(e) {
+            if (e.target === popup) popup.remove();
+        });
+        document.body.appendChild(popup);
+        
+        // 异步加载内容
+        fetch(API_BASE_URL + '/rules/' + encodeURIComponent(gameId))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                var sections = (data && data.sections) || [];
+                var match = null;
+                for (var i = 0; i < sections.length; i++) {
+                    if (sections[i].page_number == pageNum) {
+                        match = sections[i];
+                        break;
+                    }
+                }
+                var body = popup.querySelector('.citation-popup-body');
+                if (match) {
+                    var content = (match.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    body.innerHTML = '<div class="citation-section-title">' + (match.section_title || '') + '</div>' +
+                        '<div class="citation-section-text">' + content + '</div>';
+                } else {
+                    body.innerHTML = '<p class="text-muted">未找到第' + pageNum + '页的规则内容</p>';
+                }
+            })
+            .catch(function(err) {
+                var body = popup.querySelector('.citation-popup-body');
+                if (body) body.innerHTML = '<p class="text-muted" style="color:#e74c3c">加载失败</p>';
+            });
+    }
+
     // ==================== 导出页面对象 ====================
     var page = {
         render: render,
@@ -681,6 +765,7 @@ App.registerPage('chat', (function() {
         sendMessage: sendMessage,
         sendQuick: sendQuick,
         handleKeyDown: handleKeyDown,
+        showCitation: showCitation,
 
     };
 

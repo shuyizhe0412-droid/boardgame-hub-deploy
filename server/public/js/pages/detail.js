@@ -119,7 +119,7 @@ App.registerPage('detail', (function() {
         var game = state.game;
         if (!game) return '<div class="detail-info card"><p>游戏数据不存在</p></div>';
         
-        var desc = game.description || '';
+        var desc = game.description_cn || game.description || '';
         var shortDesc = desc.length > 60 ? desc.substring(0, 60) + '...' : desc;
         var displayDesc = state.descExpanded ? desc : shortDesc;
         var expandText = state.descExpanded ? '收起' : (desc.length > 60 ? '展开' : '');
@@ -132,8 +132,8 @@ App.registerPage('detail', (function() {
         var tags = game.tags || [];
 
         return '<div class="detail-info card">' +
-            '<h1 class="detail-title">' + (game.name || '未知游戏') + '</h1>' +
-            '<p class="detail-subtitle">' + (game.name_en || game.nameEn || '') + '</p>' +
+            '<h1 class="detail-title">' + (game.name_cn || game.name || '未知游戏') + '</h1>' +
+            '<p class="detail-subtitle">' + ((game.name_cn && game.name && game.name !== game.name_cn) ? game.name : '') + '</p>' +
             '<div class="detail-stats">' +
             '<div class="detail-stat"><span>👥</span><span>' + minPlayers + '-' + maxPlayers + '人</span></div>' +
             '<div class="detail-stat"><span>⏱️</span><span>' + formatDuration(duration) + '</span></div>' +
@@ -404,6 +404,27 @@ App.registerPage('detail', (function() {
             return;
         }
         console.log('[detail.js] 加载规则, gameId:', state.gameId, ', gameName:', (state.game && state.game.name));
+
+        // 优先级1：从 rule_sections 表加载智能解析的规则
+        try {
+            var sectionsData = await window.getRuleSections(state.gameId);
+            if (sectionsData && sectionsData.sections && sectionsData.sections.length > 0) {
+                var formatted = sectionsData.sections.map(function(s) {
+                    return '【' + (s.section_title || ('第' + s.page_number + '页')) + '】' + s.content;
+                }).join('\n\n');
+                console.log('[detail.js] rule_sections 命中，段数:', sectionsData.sections.length);
+                state.ruleFromServer = formatted;
+                state.ruleText = formatted;
+                state.ruleLoading = false;
+                renderRuleModalToBody();
+                return;
+            }
+            console.log('[detail.js] rule_sections 为空，尝试其他来源');
+        } catch (e) {
+            console.warn('[detail.js] rule_sections 加载失败:', e.message);
+        }
+
+        // 优先级2：从服务端规则摘要加载
         try {
             var rules = await window.getGameRules(state.gameId);
             console.log('[detail.js] getGameRules 返回:', rules ? ('长度=' + rules.length) : '空');

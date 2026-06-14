@@ -271,6 +271,10 @@ function isPlayerLoggedIn() {
 
 function playerLogout() {
   localStorage.removeItem('player_token');
+  // 清理玩家数据缓存
+  localStorage.removeItem('player_info');
+  localStorage.removeItem('player_games');
+  sessionStorage.removeItem('shopId');
   window._playerInfo = null;
 }
 
@@ -991,6 +995,13 @@ window.saveGameRules = saveGameRules;
 window.uploadCover = uploadCover;
 window.uploadRules = uploadRules;
 window.getUploads = getUploads;
+
+// 规则书智能解析 API（公开 + 管理）
+async function getRuleSections(gameId) {
+    console.log('[getRuleSections] gameId:', gameId);
+    return await apiFetch(API_BASE_URL + '/rules/' + encodeURIComponent(gameId), { method: 'GET' });
+}
+window.getRuleSections = getRuleSections;
 
 // 玩家端公开 API
 window.getGlobalGames = getGlobalGames;

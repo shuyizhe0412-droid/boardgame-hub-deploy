@@ -1,341 +1,1076 @@
-/**
- * 桌游AI教练 - 应用入口模块
- * 负责页面挂载和路由初始化
- */
+﻿var API = 'https://boardgame-hub-staging.onrender.com/api';
 
-// 活跃页面守卫：防止快速切换Tab时旧页面异步回调覆盖当前页面
-window._activePage = '';
+let currentUser = null;
+let currentToken = null;
+let currentGameId = null;
+let currentKeyword = '';
+let currentCategory = '';
 
-// Tab 导航冷却：防止疯狂点击导致多次导航
-var _lastNavTime = 0;
-
-/**
- * 获取 TabBar HTML
- * 已登录店家：首页 / 游戏库 / AI / 我的
- * 未登录顾客：首页 / 游戏库 / AI / 关于
- * @param {string} activeTab - 当前激活的 Tab
- * @returns {string} TabBar HTML 字符串
- */
-function getTabBarHtml(activeTab) {
-    var loggedIn = window.isLoggedIn && window.isLoggedIn();
-
-    var tabs = [
-        { name: 'home', icon: '🏠', text: '首页' },
-        { name: 'library', icon: '🎮', text: '游戏库' },
-        { name: 'chat', icon: '🤖', text: 'AI' }
-    ];
-
-    if (loggedIn) {
-        tabs.push({ name: 'profile', icon: '👤', text: '我的' });
-    } else {
-        tabs.push({ name: 'about', icon: 'ℹ️', text: '关于' });
-    }
-
-    var items = tabs.map(function(tab) {
-        var isActive = activeTab === tab.name ? 'active' : '';
-        return '<div class="tabbar-item ' + isActive + '" data-page="' + tab.name + '">' +
-            '<span class="tabbar-icon">' + tab.icon + '</span>' +
-            '<span class="tabbar-text">' + tab.text + '</span>' +
-            '</div>';
-    }).join('');
-
-    return '<nav class="tabbar">' + items + '</nav>';
+function debounce(fn, delay = 300) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
 }
 
-// 绑定 TabBar 点击事件（含300ms冷却）
-function bindTabBarEvents() {
-    document.querySelectorAll('.tabbar-item').forEach(function(item) {
-        item.addEventListener('click', function() {
-            var now = Date.now();
-            if (now - _lastNavTime < 300) return;
-            _lastNavTime = now;
-            navigate('/' + this.dataset.page);
-        });
-    });
+// ============ 工具函数 ============
+
+function $(sel) { return document.querySelector(sel); }
+function $$(sel) { return document.querySelectorAll(sel); }
+
+function escapeHtml(str) {
+  var div = document.createElement('div');
+  div.textContent = str || '';
+  return div.innerHTML;
 }
 
-// 全局暴露，供页面重新渲染时使用
-window.getTabBarHtml = getTabBarHtml;
-window.bindTabBarEvents = bindTabBarEvents;
-window.renderShopHeader = renderShopHeader;
-window.getShopAppend = getShopAppend;
-
-/**
- * 从URL中获取 shop 参数（支持 shop=xxx 和 shopId=xxx 两种 key）
- * @returns {string|null} shop UUID
- */
-function getShopIdFromUrl() {
-    var hash = window.location.hash || '';
-    // 支持 shop=xxx 和 shopId=xxx 两种参数名
-    var match = hash.match(/[?&]shop=([^&]+)/);
-    if (!match) match = hash.match(/[?&]shopId=([^&]+)/);
-    var shopId = match ? decodeURIComponent(match[1]) : null;
-    console.log('[getShopIdFromUrl] shopId:', shopId, ', hash:', hash);
-    return shopId;
+function showToast(msg, type = 'success') {
+ const toast = $('#toast');
+ toast.textContent = msg;
+ toast.className = `toast ${type} show`;
+ setTimeout(() => toast.classList.remove('show'), 3000);
 }
 
-/**
- * 加载店家信息并缓存到全局
- */
-async function loadShopInfo() {
-    var shopId = getShopIdFromUrl();
-    if (!shopId) {
-        shopId = sessionStorage.getItem('shopId');
-    }
-    if (!shopId) {
-        window._shopInfo = null;
-        return;
-    }
-
-    // 如果已经加载过且shopId相同，跳过
-    if (window._shopInfo && window._shopInfo.id === shopId) return;
-
-    sessionStorage.setItem('shopId', shopId);
-    console.log('[app.js] 加载店家信息, shopId:', shopId, ', session已设置');
-
-    try {
-        var result = await window.getShopInfo(shopId);
-        if (result.data) {
-            window._shopInfo = result.data;
-            console.log('[app.js] 店家信息加载成功:', result.data.name);
-            console.log('[loadShopInfo] 完成, _shopInfo:', JSON.stringify(window._shopInfo));
-        } else {
-            window._shopInfo = null;
-            console.warn('[app.js] 店家信息加载失败:', result.error);
-        }
-    } catch (e) {
-        window._shopInfo = null;
-        console.error('[app.js] 加载店家信息异常:', e);
-    }
+async function apiFetch(path, options = {}) {
+ const headers = { ...options.headers };
+ const token = currentToken || localStorage.getItem('admin_token');
+ if (token) headers['Authorization'] = `Bearer ${token}`;
+ if (!(options.body instanceof FormData)) {
+ headers['Content-Type'] = 'application/json';
+ if (options.body && typeof options.body === 'object') {
+ options.body = JSON.stringify(options.body);
+ }
+ }
+ const res = await fetch(`${API}${path}`, { ...options, headers });
+ const data = await res.json();
+ if (!res.ok) throw new Error(data.error || '请求失败');
+ return data;
 }
 
-/**
- * 渲染店家专属顶部标题栏
- * @returns {string} HTML 字符串
- */
-function renderShopHeader() {
-    var shopInfo = window._shopInfo;
-    if (!shopInfo) return '';
+function showPage(id) {
+ $$('.page').forEach(p => p.style.display = 'none');
+ $(`#${id}`).style.display = '';
+}
 
-    var logoHtml = shopInfo.logo_url ?
-        '<img src="' + shopInfo.logo_url + '" style="width:24px;height:24px;border-radius:50%;vertical-align:middle;margin-right:8px;object-fit:cover;" onerror="this.style.display=\'none\'">' :
-        '';
+// ============ 登录/注册 ============
 
-    var bgColor = shopInfo.theme_color || '#C4864B';
+function initAuth() {
+ $$('.auth-tab').forEach(tab => {
+ tab.addEventListener('click', () => {
+ $$('.auth-tab').forEach(t => t.classList.remove('active'));
+ tab.classList.add('active');
+ const which = tab.dataset.tab;
+ $('#login-form').style.display = which === 'login' ? '' : 'none';
+ $('#register-form').style.display = which === 'register' ? '' : 'none';
+ });
+ });
 
-    return '<div class="shop-header" style="background:' + bgColor + ';color:#fff;font-size:16px;font-weight:bold;' +
-        'text-align:center;padding:12px 16px;line-height:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">' +
-        logoHtml + (shopInfo.name || '桌游吧') +
+ $('#login-form').addEventListener('submit', async (e) => {
+ e.preventDefault();
+ try {
+ const data = await apiFetch('/auth/login', {
+ method: 'POST',
+ body: {
+ email: $('#login-email').value,
+ password: $('#login-password').value
+ }
+ });
+ currentToken = data.token;
+ currentUser = data.store;
+ localStorage.setItem('admin_token', currentToken);
+ localStorage.setItem('user', JSON.stringify(currentUser));
+ showToast('登录成功');
+ enterDashboard();
+ } catch (err) {
+ showToast(err.message, 'error');
+ }
+ });
+
+ $('#register-form').addEventListener('submit', async (e) => {
+ e.preventDefault();
+ try {
+ const data = await apiFetch('/auth/register', {
+ method: 'POST',
+ body: {
+ email: $('#reg-email').value,
+ password: $('#reg-password').value,
+ store_name: $('#reg-store-name').value || undefined
+ }
+ });
+ currentToken = data.token;
+ currentUser = data.store;
+ localStorage.setItem('admin_token', currentToken);
+ localStorage.setItem('user', JSON.stringify(currentUser));
+ showToast('注册成功');
+ enterDashboard();
+ } catch (err) {
+ showToast(err.message, 'error');
+ }
+ });
+}
+
+// ============ 首页/桌游列表 ============
+
+function enterDashboard() {
+ showPage('dashboard-page');
+ $('#store-name-display').textContent = currentUser.store_name || currentUser.email;
+ loadGames();
+}
+
+async function loadGames() {
+ try {
+   let url = '/games';
+  const params = [];
+  if (currentKeyword) params.push('keyword=' + encodeURIComponent(currentKeyword));
+  if (currentCategory) params.push('category=' + encodeURIComponent(currentCategory));
+  if (params.length) url += '?' + params.join('&');
+  const games = await apiFetch(url);
+ renderGameGrid(games);
+ } catch (err) {
+ if (err.message.includes('登录') || err.message.includes('过期')) {
+ logout();
+ } else {
+ showToast(err.message, 'error');
+ }
+ }
+}
+
+function renderGameGrid(games) {
+ const grid = $('#game-grid');
+ const empty = $('#empty-state');
+ const count = $('#game-count');
+
+ count.textContent = games.length;
+
+ if (games.length === 0) {
+ grid.innerHTML = '';
+ empty.style.display = '';
+ return;
+ }
+
+ empty.style.display = 'none';
+ grid.innerHTML = games.map(g => {
+ const sourceLabel = g.source === 'default'
+ ? '<span class="tag tag-default">[默认]</span>'
+ : '<span class="tag tag-custom">[自定义]</span>';
+
+ return `
+ <div class="game-card" data-id="${g.id}">
+ <div class="card-cover">
+ ${g.cover_image
+ ? `<img src="${g.cover_image}" alt="${g.name}">`
+ : '🎲'}
+ </div>
+ <div class="card-body">
+ <div class="card-title">
+ ${g.name}
+ ${sourceLabel}
+ </div>
+ <div class="card-meta">
+ ${g.min_players && g.max_players
+ ? `<span>👥 ${g.min_players}-${g.max_players}人</span>`
+ : ''}
+ ${g.duration
+ ? `<span>⏱️ ${g.duration}分钟</span>`
+ : ''}
+ </div>
+ </div>
+ </div>
+ `;
+ }).join('');
+
+ grid.querySelectorAll('.game-card').forEach(card => {
+ card.addEventListener('click', () => openGameDetail(card.dataset.id));
+ });
+}
+
+// ============ 桌游详情 ============
+
+async function openGameDetail(gameId) {
+ currentGameId = gameId;
+ showPage('detail-page');
+ try {
+ const data = await apiFetch(`/games/${gameId}`);
+ renderGameDetail(data.game);
+ } catch (err) {
+ showToast(err.message, 'error');
+ showPage('dashboard-page');
+ }
+}
+
+function renderGameDetail(game) {
+ $('#detail-header-title').textContent = game.name;
+ $('#detail-name').textContent = game.name;
+
+ // 封面
+  const cover = $('#detail-cover');
+  if (game.cover_image) {
+    cover.innerHTML = `<img src="${game.cover_image}" alt="${game.name}">`;
+    $('#restore-cover-btn').style.display = '';
+  } else {
+    cover.innerHTML = '<span class="cover-placeholder">🎲</span>';
+    $('#restore-cover-btn').style.display = 'none';
+  }
+
+// 基本信息
+ const players = game.min_players && game.max_players
+ ? `${game.min_players}-${game.max_players} 人` : '未设置';
+ const duration = game.duration ? `${game.duration} 分钟` : '未设置';
+ const diff = game.difficulty || 3;
+ const diffStars = '★'.repeat(diff) + '☆'.repeat(5 - diff);
+
+ $('#detail-players').textContent = players;
+ $('#detail-duration').textContent = duration;
+ $('#detail-difficulty').textContent = diffStars;
+
+ // 标签
+ const tagsEl = $('#detail-tags');
+ if (game.tags) {
+ const tags = typeof game.tags === 'string' ? game.tags.split(',') : game.tags;
+ tagsEl.innerHTML = tags.map(t => `<span class="tag">${t.trim()}</span>`).join('');
+ } else {
+ tagsEl.innerHTML = '';
+ }
+
+ // 规则书文件
+ loadGameFiles(game.id);
+
+ // 规则书智能解析段落
+ loadRuleSections(game.id);
+
+ // 二维码 — 指向玩家端 AI 教学页
+ const playerBase = 'https://boardgame-hub-deploy.pages.dev/app.html';
+ const shopId = game.store_id || currentUser.id;
+ const playUrl = `${playerBase}/#/chat?gameId=${game.id}&shop=${shopId}`;
+ const qrApi = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(playUrl)}`;
+ $('#qr-code').innerHTML = `<img src="${qrApi}" alt="QR Code">`;
+}
+
+async function loadGameFiles(gameId) {
+ const filesEl = $('#detail-files');
+ try {
+ const files = await apiFetch(`/upload/${gameId}`);
+ if (!files || files.length === 0) {
+ filesEl.innerHTML = '<p class="text-muted">暂无规则书文件</p>';
+ return;
+ }
+ filesEl.innerHTML = files.map(f => `
+ <div class="file-item">
+ <span>${f.file_type === 'pdf' ? '📄' : '🖼️'} ${f.file_type.toUpperCase()} 文件</span>
+ <a href="${f.file_url}" target="_blank">查看</a>
+ <button class="btn btn-sm btn-danger" onclick="deleteFile('${f.id}')">删除</button>
+ </div>
+ `).join('');
+ } catch {
+ filesEl.innerHTML = '<p class="text-muted">暂无规则书文件</p>';
+ }
+}
+
+
+// ============ 删除规则书文件 ============
+
+async function deleteFile(fileId) {
+  if (!confirm('确定要删除这个文件吗？此操作不可撤销。')) return;
+  try {
+    await apiFetch(`/upload/${fileId}`, { method: 'DELETE' });
+    showToast('删除成功');
+    loadGameFiles(currentGameId);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// ============ 规则书智能解析 ============
+
+async function loadRuleSections(gameId) {
+  var el = document.getElementById('detail-rule-sections');
+  if (!el) return;
+  try {
+    var data = await apiFetch('/rules/' + encodeURIComponent(gameId));
+    var sections = (data && data.sections) || [];
+    if (sections.length === 0) {
+      el.innerHTML = '<p class="text-muted">尚未上传规则书，点击「上传并解析」</p>';
+      return;
+    }
+    var html = '<div class="rule-sections-count">已提取 <b>' + sections.length + '</b> 段规则' +
+      ' <button class="btn btn-sm btn-outline-danger" onclick="clearAllRuleSections(\'' + gameId + '\')" style="margin-left:8px">🗑 清空全部</button></div>';
+    html += '<div class="rule-sections-list-scroll">';
+    sections.forEach(function(s) {
+      html += '<div class="rule-section-item">' +
+        '<div class="rule-section-item-header">' +
+        '<span class="rule-section-badge">第' + s.page_number + '页</span>' +
+        '<span class="rule-section-title">' + (s.section_title || '') + '</span>' +
+        '<span class="rule-section-source">' + (s.source_type === 'image_ocr' ? '🖼️OCR' : s.source_type === 'pdf' ? '📄PDF' : '📝文本') + '</span>' +
+        '<button class="btn btn-sm btn-danger rule-section-del-btn" onclick="deleteRuleSection(\'' + s.id + '\')">✕</button>' +
+        '</div>' +
+        '<div class="rule-section-content">' + (s.content || '').substring(0, 200) + ((s.content || '').length > 200 ? '...' : '') + '</div>' +
         '</div>';
+    });
+    html += '</div>';
+    el.innerHTML = html;
+  } catch (err) {
+    el.innerHTML = '<p class="text-muted" style="color:#e74c3c">加载规则段落失败: ' + err.message + '</p>';
+  }
 }
 
-/**
- * 渲染页面内容
- * @param {string} pageName - 页面名称
- * @param {object} params - URL 参数对象
- * @param {string} [activeTab] - TabBar 高亮覆盖名（如 chat-list 页面高亮 chat 标签）
- */
-function renderPageContent(pageName, params, activeTab) {
-    // 活跃页面守卫：标记当前活跃页面，防止旧页面异步回调覆盖
-    window._activePage = pageName;
-
-    var app = document.getElementById('app');
-    if (!app) return;
-
-    // 从 pages.js 注册的映射表中获取页面组件
-    var page = window._pages[pageName];
-    if (!page || typeof page.render !== 'function') {
-        app.innerHTML = renderShopHeader() + '<div class="container"><h1>页面未找到: ' + pageName + '</h1></div>' + getTabBarHtml('home');
-        return;
-    }
-
-    // 组合页面内容：全局店家标题栏 + 页面内容 + TabBar
-    var content = page.render(params);
-    var noTabBarPages = ['detail', 'chat'];
-    var tabName = activeTab || pageName;
-    var html = renderShopHeader() + content + (noTabBarPages.indexOf(pageName) === -1 ? getTabBarHtml(tabName) : '');
-    app.innerHTML = html;
-
-    // 绑定 TabBar 点击事件
-    bindTabBarEvents();
-
-    // 调用页面初始化方法
-    if (typeof page.init === 'function') {
-        page.init(params);
-    }
+async function triggerRulesUpload() {
+  var input = document.getElementById('rules-file-input');
+  if (!input) return;
+  input.click();
 }
 
-/**
- * 认证守卫：检查是否需要跳转
- * @param {string} page - 页面名
- * @returns {boolean} 是否允许访问
- */
-function authGuard(page) {
-    var loggedIn = window.isLoggedIn && window.isLoggedIn();
+async function handleRulesFileSelected(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  if (!currentGameId) { showToast('请先选择游戏', 'error'); e.target.value = ''; return; }
 
-    // profile 页面需要登录 → 未登录跳转到关于页（而非登录页）
-    if (page === 'profile' && !loggedIn) {
-        console.log('[app.js] 未登录，跳转到关于页面');
-        window.location.hash = '/about';
-        return false;
-    }
+  var el = document.getElementById('detail-rule-sections');
+  if (el) el.innerHTML = '<p class="text-muted">⏳ 正在上传并解析规则书，请稍候...</p>';
 
-    // auth 页面：已登录则跳转到 profile
-    if (page === 'auth' && loggedIn) {
-        console.log('[app.js] 已登录，跳转到个人中心');
-        window.location.hash = '/profile';
-        return false;
-    }
+  try {
+    var fd = new FormData();
+    fd.append('file', file);
+    fd.append('game_id', currentGameId);
 
-    return true;
+    var resp = await fetch(API + '/rules/upload', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + currentToken },
+      body: fd
+    });
+    var data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '上传失败');
+
+    showToast('✅ 成功提取 ' + data.sections + ' 段规则');
+    loadRuleSections(currentGameId);
+  } catch (err) {
+    showToast('规则解析失败: ' + err.message, 'error');
+    loadRuleSections(currentGameId);
+  }
+  e.target.value = '';
 }
 
-/**
- * 已登录时自动加载店家信息
- */
-async function loadAuthShopInfo() {
-    var loggedIn = window.isLoggedIn && window.isLoggedIn();
-    if (!loggedIn) return;
+async function deleteRuleSection(sectionId) {
+  if (!confirm('确定要删除这条规则段落吗？')) return;
+  try {
+    await apiFetch('/rules/section/' + encodeURIComponent(sectionId), { method: 'DELETE' });
+    showToast('删除成功');
+    loadRuleSections(currentGameId);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
 
-    // 如果已经通过 URL shop 参数加载了店家信息，不覆盖
-    if (window._shopInfo) return;
+async function clearAllRuleSections(gameId) {
+  if (!confirm('确定清空该游戏的全部规则段落吗？此操作不可撤销！')) return;
+  try {
+    await apiFetch('/rules/game/' + encodeURIComponent(gameId), { method: 'DELETE' });
+    showToast('已清空全部规则段落');
+    loadRuleSections(gameId);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
 
+function initRulesUpload() {
+  var btn = document.getElementById('upload-rules-btn');
+  if (btn) btn.addEventListener('click', triggerRulesUpload);
+
+  var input = document.getElementById('rules-file-input');
+  if (input) input.addEventListener('change', handleRulesFileSelected);
+}
+
+// ============ 添加/编辑桌游弹窗 ============
+
+let editingGameId = null;
+
+function openGameModal(game = null) {
+ editingGameId = game ? game.id : null;
+ $('#modal-title').textContent = game ? '编辑桌游' : '添加桌游';
+ $('#form-game-name').value = game?.name || '';
+ $('#form-min-players').value = game?.min_players || '';
+ $('#form-max-players').value = game?.max_players || '';
+ $('#form-duration').value = game?.duration || '';
+ $('#form-tags').value = game?.tags || '';
+ $('#form-cover').value = '';
+ $('#form-rulebook').value = '';
+
+ const diff = game?.difficulty || 3;
+ $$('#difficulty-stars .star').forEach(s => {
+ s.classList.toggle('active', parseInt(s.dataset.value) <= diff);
+ });
+
+ $('#game-modal').style.display = '';
+}
+
+function closeGameModal() {
+ $('#game-modal').style.display = 'none';
+ editingGameId = null;
+}
+
+function initGameModal() {
+ // 难度星星
+ $$('#difficulty-stars .star').forEach(star => {
+ star.addEventListener('click', () => {
+ const val = parseInt(star.dataset.value);
+ $$('#difficulty-stars .star').forEach(s => {
+ s.classList.toggle('active', parseInt(s.dataset.value) <= val);
+ });
+ });
+ });
+
+ // 关闭弹窗
+ $('#modal-close-btn').addEventListener('click', closeGameModal);
+ $('#modal-cancel-btn').addEventListener('click', closeGameModal);
+ $('#game-modal').addEventListener('click', (e) => {
+ if (e.target === $('#game-modal')) closeGameModal();
+ });
+
+ // 添加按钮
+ $('#add-game-btn').addEventListener('click', () => openGameModal());
+
+ // 表单提交
+ $('#game-form').addEventListener('submit', async (e) => {
+ e.preventDefault();
+ const submitBtn = $('#modal-submit-btn');
+ submitBtn.disabled = true;
+ submitBtn.textContent = '保存中...';
+
+ try {
+ const difficulty = $$('#difficulty-stars .star.active').length;
+
+ const gameData = {
+ name: $('#form-game-name').value,
+ min_players: parseInt($('#form-min-players').value) || null,
+ max_players: parseInt($('#form-max-players').value) || null,
+ duration: parseInt($('#form-duration').value) || null,
+ difficulty: difficulty,
+ tags: $('#form-tags').value || null
+ };
+
+ let gameId;
+ if (editingGameId) {
+ await apiFetch(`/games/${editingGameId}`, {
+ method: 'PUT',
+ body: gameData
+ });
+ gameId = editingGameId;
+ } else {
+ const result = await apiFetch('/games', {
+ method: 'POST',
+ body: gameData
+ });
+ gameId = result.game.id;
+ }
+
+ // 上传封面
+ const coverFile = $('#form-cover').files[0];
+ if (coverFile) {
+ const fd = new FormData();
+ fd.append('file', coverFile);
+ fd.append('game_id', gameId);
+ const res = await fetch(`${API}/upload/cover`, {
+ method: 'POST',
+ headers: { 'Authorization': `Bearer ${currentToken}` },
+ body: fd
+ });
+ if (!res.ok) {
+ const err = await res.json();
+ console.warn('封面上传失败:', err.error);
+ }
+ }
+
+ // 上传规则书
+ const rulebookFile = $('#form-rulebook').files[0];
+ if (rulebookFile) {
+ const fd = new FormData();
+ fd.append('file', rulebookFile);
+ fd.append('game_id', gameId);
+ const res = await fetch(`${API}/upload`, {
+ method: 'POST',
+ headers: { 'Authorization': `Bearer ${currentToken}` },
+ body: fd
+ });
+ if (!res.ok) {
+ const err = await res.json();
+ console.warn('规则书上传失败:', err.error);
+ }
+ }
+
+ showToast(editingGameId ? '更新成功' : '添加成功');
+ closeGameModal();
+ loadGames();
+ } catch (err) {
+ showToast(err.message, 'error');
+ } finally {
+ submitBtn.disabled = false;
+ submitBtn.textContent = '保存';
+ }
+ });
+}
+
+// ============ 上传规则书 ============
+
+function initUploadModal() {
+ $('#upload-rulebook-btn').addEventListener('click', () => {
+ $('#upload-modal').style.display = '';
+ });
+
+ $('#upload-modal-close-btn').addEventListener('click', () => {
+ $('#upload-modal').style.display = 'none';
+ });
+ $('#upload-cancel-btn').addEventListener('click', () => {
+ $('#upload-modal').style.display = 'none';
+ });
+ $('#upload-modal').addEventListener('click', (e) => {
+ if (e.target === $('#upload-modal')) $('#upload-modal').style.display = 'none';
+ });
+
+ $('#upload-form').addEventListener('submit', async (e) => {
+ e.preventDefault();
+ const file = $('#upload-file-input').files[0];
+ if (!file) return;
+
+ try {
+ const fd = new FormData();
+ fd.append('file', file);
+ fd.append('game_id', currentGameId);
+ await fetch(`${API}/upload`, {
+ method: 'POST',
+ headers: { 'Authorization': `Bearer ${currentToken}` },
+ body: fd
+ }).then(r => r.json());
+
+ showToast('上传成功');
+ $('#upload-modal').style.display = 'none';
+ $('#upload-file-input').value = '';
+ loadGameFiles(currentGameId);
+ loadRuleSections(currentGameId);
+ } catch (err) {
+ showToast('上传失败', 'error');
+ }
+ });
+
+ // 封面上传
+ $('#upload-cover-btn').addEventListener('click', () => {
+ $('#cover-file-input').click();
+ });
+ $('#cover-file-input').addEventListener('change', async (e) => {
+ const file = e.target.files[0];
+ if (!file) return;
+ try {
+ const fd = new FormData();
+ fd.append('file', file);
+ fd.append('game_id', currentGameId);
+ const res = await fetch(`${API}/upload/cover`, {
+ method: 'POST',
+ headers: { 'Authorization': `Bearer ${currentToken}` },
+ body: fd
+ });
+ if (!res.ok) { throw new Error((await res.json()).error); }
+ const data = await res.json();
+ const coverUrl = data.file && data.file.url ? data.file.url : null;
+ if (coverUrl) {
+ // 用相对路径时拼接 origin
+ const finalUrl = coverUrl.startsWith('http') ? coverUrl : window.location.origin + coverUrl;
+ await apiFetch(`/games/${currentGameId}`, {
+ method: 'PUT',
+ body: JSON.stringify({ cover_image: finalUrl })
+ });
+ }
+ showToast('封面更新成功');
+ openGameDetail(currentGameId);
+ } catch (err) {
+ showToast(err.message || '封面上传失败', 'error');
+ }
+ // 清空 input，允许重新选择同一文件
+ e.target.value = '';
+ });
+
+  // 还原默认封面按钮
+  $('#restore-cover-btn').addEventListener('click', restoreCover);
+}
+
+
+// ============ 还原默认封面 ============
+
+async function restoreCover() {
+  if (!confirm('确定要还原为默认封面吗？')) return;
+  try {
+    await apiFetch(`/games/${currentGameId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ cover_image: '' })
+    });
+    showToast('已还原为默认封面');
+    openGameDetail(currentGameId);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+// ============ 删除桌游 ============
+
+function initDelete() {
+ $('#delete-game-btn').addEventListener('click', async () => {
+ if (!confirm('确定要删除这个桌游吗？此操作不可撤销。')) return;
+ try {
+ await apiFetch(`/games/${currentGameId}`, { method: 'DELETE' });
+ showToast('删除成功');
+ showPage('dashboard-page');
+ loadGames();
+ } catch (err) {
+ showToast(err.message, 'error');
+ }
+ });
+}
+
+// ============ 导航 ============
+
+function initNavigation() {
+ $('#back-btn').addEventListener('click', () => {
+ showPage('dashboard-page');
+ loadGames();
+ });
+
+ $('#logout-btn').addEventListener('click', logout);
+
+  $('#view-player-btn').addEventListener('click', () => {
+    var playerUrl = 'https://boardgame-hub-deploy.pages.dev/app.html#/home?shop=' + (currentUser ? currentUser.id : '');
+      window.open(playerUrl, '_blank');
+  });
+}
+
+function logout() {
+ currentToken = null;
+ currentUser = null;
+ localStorage.removeItem('admin_token');
+ localStorage.removeItem('user');
+ showPage('auth-page');
+}
+
+
+// ===== 规则编辑弹窗 =====
+
+function openRulesModal() {
+  document.body.style.overflow = 'hidden';
+  loadExistingRules();
+  $('#rules-modal').style.display = '';
+}
+
+function closeRulesModal() {
+  document.body.style.overflow = '';
+  $('#rules-modal').style.display = 'none';
+}
+
+async function loadExistingRules() {
+  try {
+    const data = await apiFetch(`/games/${currentGameId}/rules`);
+    $('#rules-textarea').value = data.rules_text || '';
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function initRulesModal() {
+  $('#edit-rules-btn').addEventListener('click', () => {
+    openRulesModal();
+  });
+
+  $('#rules-modal-close-btn').addEventListener('click', closeRulesModal);
+  $('#rules-modal-cancel-btn').addEventListener('click', closeRulesModal);
+  $('#rules-modal').addEventListener('click', (e) => {
+    if (e.target === $('#rules-modal')) closeRulesModal();
+  });
+
+  $('#rules-modal-save-btn').addEventListener('click', async () => {
     try {
-        if (window.authGetMe) {
-            var me = await window.authGetMe();
-            if (me) {
-                window._shopInfo = {
-                    id: me.id || me.store_id || '',
-                    name: me.store_name || me.name || '我的桌游吧',
-                    logo_url: me.logo_url || '',
-                    theme_color: me.theme_color || '#C4864B'
-                };
-                sessionStorage.setItem('shopId', window._shopInfo.id);
-                console.log('[app.js] 已登录店家:', window._shopInfo.name);
-            }
-        }
-    } catch (e) {
-        console.warn('[app.js] 自动加载店家信息失败:', e.message);
+      await apiFetch(`/games/${currentGameId}/rules`, {
+        method: 'PUT',
+        body: { rules_text: $('#rules-textarea').value }
+      });
+      showToast('规则保存成功');
+      closeRulesModal();
+    } catch (err) {
+      showToast(err.message, 'error');
     }
+  });
 }
 
-/**
- * 初始化应用
- */
-async function initApp() {
-    // 初始化路由
-    initRouter();
+// ============ 搜索与筛选 ============
 
-    // 先加载店家信息（从URL shop参数）
-    await loadShopInfo();
+// ============ 搜索与筛选 ============
+function initSearchAndFilter() {
+  const searchInput = document.getElementById('search-input');
+  const searchClear = document.getElementById('search-clear');
+  const filterTags = document.getElementById('filter-tags');
 
-    // 已登录店家自动加载信息
-    await loadAuthShopInfo();
+  if (searchInput) {
+    searchInput.addEventListener('input', debounce(() => {
+      currentKeyword = searchInput.value.trim();
+      searchClear.style.display = currentKeyword ? '' : 'none';
+      loadGames();
+    }, 300));
+  }
 
-    // 路由到页面名的映射（/chat 无任何参数时映射到入口页）
-    function resolvePage(route, params) {
-        if (route === 'chat' && !params.id && !params.gameId && !params.mode) {
-            return 'chat-list';
-        }
-        return route;
-    }
+  if (searchClear) {
+    searchClear.addEventListener('click', () => {
+      searchInput.value = '';
+      currentKeyword = '';
+      searchClear.style.display = 'none';
+      loadGames();
+    });
+  }
 
-    // 全局跳转辅助：从首页跳转到详情页时记录来源（供chat页返回使用）
-    window.navigateToDetail = function(id, category) {
-        if (id) {
-            sessionStorage.setItem('chatFrom', '/detail?id=' + id);
-        }
-        if (category) {
-            var recent = localStorage.getItem('recentCategories') || '';
-            var cats = recent ? recent.split(',').filter(function(c) { return c !== category; }) : [];
-            cats.unshift(category);
-            localStorage.setItem('recentCategories', cats.slice(0, 5).join(','));
-        }
-        // 带上 shop 参数（如果有）
-        var shopAppend = getShopAppend();
-        window.location.hash = '/detail?id=' + encodeURIComponent(id) + shopAppend;
-    };
+  if (filterTags) {
+    filterTags.addEventListener('click', (e) => {
+      const tag = e.target.closest('.filter-tag');
+      if (!tag) return;
+      filterTags.querySelectorAll('.filter-tag').forEach(t => t.classList.remove('active'));
+      tag.classList.add('active');
+      currentCategory = tag.dataset.category || '';
+      loadGames();
+    });
+  }
+}
 
-    // 监听路由变化，渲染页面
-    window.addEventListener('routechange', function(e) {
-        var page = resolvePage(e.detail.page, e.detail.params);
-        var currentHash = window.location.hash;
+// ============ 批量从游戏库添加 ============
 
-        // Bug 4 修复：进入 detail/chat 页面前保存来源页
-        if (page === 'detail' || page === 'chat') {
-            var prevPage = sessionStorage.getItem('currentMainPage') || '/home';
-            sessionStorage.setItem('prevPageBeforeDetail', prevPage);
-        } else {
-            // 记录当前页作为"主页"（用于从 detail 返回）
-            var hashWithoutParams = currentHash.split('?')[0];
-            sessionStorage.setItem('currentMainPage', hashWithoutParams);
-        }
+var libraryState = {
+  allGames: [],
+  filteredGames: [],
+  selectedIds: {},
+  existingNames: {},
+  currentPage: 1,
+  pageSize: 20,
+  keyword: '',
+  category: ''
+};
 
-        // 认证守卫
-        if (!authGuard(page)) return;
+function openBatchLibraryModal() {
+  libraryState = {
+    allGames: [],
+    filteredGames: [],
+    selectedIds: {},
+    existingNames: {},
+    currentPage: 1,
+    pageSize: 20,
+    keyword: '',
+    category: ''
+  };
+  $('#batch-library-modal').style.display = '';
+  $('#library-search-input').value = '';
+  $$('#library-filter-tags .filter-tag').forEach(function (t) {
+    t.classList.toggle('active', t.dataset.cat === '');
+  });
+  loadLibraryGames();
+}
 
-        // 路由变化时也检查 shop 参数（可能从新URL中获取）
-        var shopIdFromUrl = getShopIdFromUrl();
-        if (shopIdFromUrl && (!window._shopInfo || window._shopInfo.id !== shopIdFromUrl)) {
-            loadShopInfo().then(function() {
-                var tabOverride = (page === 'chat-list') ? 'chat' : null;
-                renderPageContent(page, e.detail.params, tabOverride);
-            });
-        } else {
-            var tabOverride = (page === 'chat-list') ? 'chat' : null;
-            renderPageContent(page, e.detail.params, tabOverride);
-        }
+function closeBatchLibraryModal() {
+  $('#batch-library-modal').style.display = 'none';
+}
+
+function loadLibraryGames() {
+  $('#library-game-list').innerHTML = '<div class="loading-state"><div class="spinner"></div><p>加载中...</p></div>';
+
+  // 加载全局游戏库
+  apiFetch('/admin/global-games').then(function (games) {
+    libraryState.allGames = games || [];
+
+    // 加载店家已有的游戏名（用于去重标记）
+    return apiFetch('/games');
+  }).then(function (existing) {
+    var names = {};
+    (existing || []).forEach(function (g) { names[g.name] = true; });
+    libraryState.existingNames = names;
+
+    // 预选已存在的游戏（勾选但禁用）
+    libraryState.allGames.forEach(function (g) {
+      if (names[g.game_name]) {
+        libraryState.selectedIds[g.id] = true;
+      }
     });
 
-    // 渲染初始页面
-    var hashInfo = parseHash(window.location.hash);
-    var page = resolvePage(hashInfo.route || 'home', hashInfo.params);
-
-    // 初始页面的认证守卫
-    if (!authGuard(page)) return;
-
-    var tabOverride = (page === 'chat-list') ? 'chat' : null;
-    renderPageContent(page, hashInfo.params, tabOverride);
+    applyLibraryFilter();
+  }).catch(function (err) {
+    // 如果获取已有游戏失败，至少显示全局库
+    if (libraryState.allGames.length > 0) {
+      applyLibraryFilter();
+    } else {
+      showToast('加载游戏库失败: ' + err.message, 'error');
+      closeBatchLibraryModal();
+    }
+  });
 }
 
-/**
- * 获取 shop 参数追加字符串（用于导航时保持 shop 参数）
- */
-function getShopAppend() {
-    var shopId = window._shopInfo ? window._shopInfo.id : null;
-    if (!shopId) shopId = sessionStorage.getItem('shopId');
-    return shopId ? '&shop=' + encodeURIComponent(shopId) : '';
+function applyLibraryFilter() {
+  var keyword = libraryState.keyword.toLowerCase();
+  var cat = libraryState.category;
+
+  libraryState.filteredGames = libraryState.allGames.filter(function (g) {
+    var name = (g.game_name || '').toLowerCase();
+    var tags = (g.tags || '').toLowerCase();
+    if (keyword && name.indexOf(keyword) === -1 && tags.indexOf(keyword) === -1) return false;
+    if (cat && tags.indexOf(cat.toLowerCase()) === -1) return false;
+    return true;
+  });
+
+  $('#library-total').textContent = libraryState.filteredGames.length;
+  libraryState.currentPage = 1;
+  renderLibraryPage();
 }
 
-/**
- * 「关于」页面 - 未登录顾客看到的第4个标签页
- * 显示 App 简介，底部提供店家登录入口（醒目按钮）
- */
-App.registerPage('about', {
-    render: function() {
-        var shopAppend = getShopAppend();
-        return '<div style="min-height:100vh;background:#F8F6F1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;">' +
-            // 图标
-            '<div style="font-size:64px;margin-bottom:20px;">🎲</div>' +
-            // 标题
-            '<div style="font-size:24px;font-weight:700;color:#2D2A26;margin-bottom:8px;">桌游AI教练</div>' +
-            // 副标题
-            '<div style="font-size:15px;color:#C4864B;margin-bottom:24px;">AI驱动的桌游教学助手</div>' +
-            // 简介
-            '<div style="max-width:300px;font-size:14px;color:#6B6258;line-height:1.8;margin-bottom:28px;">' +
-            '扫码学习桌游规则，让桌游入门不再难</div>' +
-            // 版本
-            '<div style="font-size:12px;color:#B5AFA6;margin-bottom:36px;">v1.0</div>' +
-            // 店家管理入口（醒目按钮区域）—— 仅未登录时显示
-            '<div style="background:#FFFFFF;border:1px solid #E5E0D8;border-radius:12px;padding:20px 28px;margin-bottom:24px;max-width:300px;width:100%;box-shadow:0 2px 8px rgba(0,0,0,0.04);">' +
-            '<div style="font-size:15px;font-weight:600;color:#2D2A26;margin-bottom:6px;">店家管理入口</div>' +
-            '<div style="font-size:13px;color:#9B9488;margin-bottom:16px;">登录后管理您的桌游和规则</div>' +
-            '<a href="#/auth' + shopAppend + '" style="display:inline-block;background:#C4864B;color:#FFFFFF;border:none;border-radius:20px;padding:10px 32px;font-size:14px;font-weight:500;text-decoration:none;cursor:pointer;">登录 / 注册</a>' +
-            '</div>' +
-            '</div>';
-    },
-    init: function() {}  // 无异步初始化
-});
+function renderLibraryPage() {
+  var start = (libraryState.currentPage - 1) * libraryState.pageSize;
+  var end = start + libraryState.pageSize;
+  var page = libraryState.filteredGames.slice(start, end);
+  var totalPages = Math.ceil(libraryState.filteredGames.length / libraryState.pageSize) || 1;
 
-// 页面加载完成后初始化应用
-document.addEventListener('DOMContentLoaded', initApp);
+  $('#library-game-list').innerHTML = page.map(function (g) {
+    var isExisting = !!libraryState.existingNames[g.game_name];
+    var isChecked = !!libraryState.selectedIds[g.id];
+    var diff = g.difficulty || 2;
+    var stars = '\u2605'.repeat(diff) + '\u2606'.repeat(5 - diff);
+
+    return (
+      '<div class="library-game-item' + (isChecked ? ' selected' : '') + (isExisting ? ' existing' : '') + '">' +
+        '<label class="library-game-checkbox">' +
+          '<input type="checkbox" data-id="' + g.id + '" ' + (isChecked ? 'checked' : '') + (isExisting ? ' disabled' : '') + '>' +
+          '<span class="checkbox-custom"></span>' +
+        '</label>' +
+        '<div class="library-game-info">' +
+          '<div class="library-game-name">' +
+            escapeHtml(g.game_name) +
+            (isExisting ? ' <span class="tag tag-default">已拥有</span>' : '') +
+          '</div>' +
+          '<div class="library-game-meta">' +
+            '<span>\uD83D\uDC65 ' + (g.player_min || 2) + '-' + (g.player_max || 4) + '人</span>' +
+            '<span>\u23F1 ' + (g.duration || 30) + '分钟</span>' +
+            '<span>' + stars + '</span>' +
+          '</div>' +
+          '<div class="library-game-tags">' + (g.tags ? g.tags.split(',').map(function (t) { return '<span class="tag">' + escapeHtml(t.trim()) + '</span>'; }).join('') : '') + '</div>' +
+          '<div class="library-game-desc">' + escapeHtml((g.description || '').slice(0, 60)) + '</div>' +
+        '</div>' +
+      '</div>'
+    );
+  }).join('');
+
+  // 分页
+  var pagHtml = '';
+  if (totalPages > 1) {
+    for (var p = 1; p <= totalPages; p++) {
+      pagHtml += '<button class="page-btn' + (p === libraryState.currentPage ? ' active' : '') + '" data-page="' + p + '">' + p + '</button>';
+    }
+  }
+  $('#library-pagination').innerHTML = pagHtml;
+
+  // 更新选中计数
+  updateLibrarySelectedCount();
+}
+
+function updateLibrarySelectedCount() {
+  var count = 0;
+  var ids = Object.keys(libraryState.selectedIds);
+  for (var i = 0; i < ids.length; i++) {
+    if (libraryState.selectedIds[ids[i]]) count++;
+  }
+  $('#library-selected-count').textContent = count;
+  $('#library-summary-count').textContent = count;
+  if (count > 0) {
+    $('#library-summary').style.display = '';
+    $('#batch-library-confirm-btn').disabled = false;
+  } else {
+    $('#library-summary').style.display = 'none';
+    $('#batch-library-confirm-btn').disabled = true;
+  }
+}
+
+async function submitBatchLibrary() {
+  var ids = [];
+  var allIds = Object.keys(libraryState.selectedIds);
+  for (var i = 0; i < allIds.length; i++) {
+    if (libraryState.selectedIds[allIds[i]]) {
+      ids.push(allIds[i]);
+    }
+  }
+
+  // 去掉已存在的（后端也会去重，但前端先过滤减少请求）
+  ids = ids.filter(function (id) {
+    var game = libraryState.allGames.find(function (g) { return g.id === id; });
+    return game && !libraryState.existingNames[game.game_name];
+  });
+
+  if (ids.length === 0) {
+    showToast('没有新游戏需要添加', 'error');
+    return;
+  }
+
+  var confirmBtn = $('#batch-library-confirm-btn');
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = '添加中...';
+
+  try {
+    var result = await apiFetch('/games/batch-add', {
+      method: 'POST',
+      body: { game_ids: ids }
+    });
+    showToast('\u2705 成功添加 ' + result.added + ' 款游戏' + (result.skipped > 0 ? '，跳过 ' + result.skipped + ' 款已有' : ''));
+    closeBatchLibraryModal();
+    loadGames();
+  } catch (err) {
+    showToast(err.message, 'error');
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = '添加到我的游戏';
+  }
+}
+
+function initBatchLibraryModal() {
+  // 打开弹窗
+  $('#batch-library-btn').addEventListener('click', openBatchLibraryModal);
+  // 空状态按钮
+  var emptyBtn = $('#empty-add-btn');
+  if (emptyBtn) {
+    emptyBtn.addEventListener('click', openBatchLibraryModal);
+  }
+
+  // 关闭弹窗
+  $('#batch-library-close-btn').addEventListener('click', closeBatchLibraryModal);
+  $('#batch-library-cancel-btn').addEventListener('click', closeBatchLibraryModal);
+  $('#batch-library-modal').addEventListener('click', function (e) {
+    if (e.target === $('#batch-library-modal')) closeBatchLibraryModal();
+  });
+
+  // 搜索
+  $('#library-search-input').addEventListener('input', debounce(function () {
+    libraryState.keyword = $('#library-search-input').value.trim();
+    applyLibraryFilter();
+  }, 300));
+
+  // 分类筛选
+  $('#library-filter-tags').addEventListener('click', function (e) {
+    var tag = e.target.closest('.filter-tag');
+    if (!tag) return;
+    $$('#library-filter-tags .filter-tag').forEach(function (t) { t.classList.remove('active'); });
+    tag.classList.add('active');
+    libraryState.category = tag.dataset.cat || '';
+    applyLibraryFilter();
+  });
+
+  // 分页点击
+  $('#library-pagination').addEventListener('click', function (e) {
+    var btn = e.target.closest('.page-btn');
+    if (!btn) return;
+    libraryState.currentPage = parseInt(btn.dataset.page);
+    renderLibraryPage();
+  });
+
+  // 复选框点击
+  $('#library-game-list').addEventListener('change', function (e) {
+    if (e.target.type !== 'checkbox') return;
+    var id = e.target.dataset.id;
+    var isExisting = e.target.disabled;
+    if (isExisting) {
+      e.target.checked = true; // 强制保持选中
+      return;
+    }
+    libraryState.selectedIds[id] = e.target.checked;
+
+    // 更新行样式
+    var row = e.target.closest('.library-game-item');
+    if (row) row.classList.toggle('selected', e.target.checked);
+
+    updateLibrarySelectedCount();
+  });
+
+  // 确认添加
+  $('#batch-library-confirm-btn').addEventListener('click', submitBatchLibrary);
+}
+
+// ============ 店铺入口二维码 ============
+
+function openStoreQrModal() {
+  var storeName = currentUser ? currentUser.store_name : '桌游吧';
+  var storeId = currentUser ? currentUser.id : '';
+  var url = 'https://boardgame-hub-deploy.pages.dev/app.html#/home?shop=' + storeId;
+  var qrSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(url);
+
+  $('#store-qr-img').src = qrSrc;
+  $('#store-qr-name').textContent = '扫描二维码进入「' + storeName + '」的桌游列表';
+  $('#store-qr-modal').style.display = '';
+}
+
+function closeStoreQrModal() {
+  $('#store-qr-modal').style.display = 'none';
+}
+
+async function downloadStoreQr() {
+  var qrSrc = $('#store-qr-img').src;
+  if (!qrSrc) {
+    showToast('二维码尚未生成', 'error');
+    return;
+  }
+
+  var storeName = currentUser ? currentUser.store_name : '桌游吧';
+  var downloadBtn = $('#store-qr-download-btn');
+  downloadBtn.disabled = true;
+  downloadBtn.textContent = '下载中...';
+
+  try {
+    var resp = await fetch(qrSrc);
+    var blob = await resp.blob();
+    saveAs(blob, storeName + '_店铺入口码.png');
+    showToast('下载完成');
+  } catch (err) {
+    showToast('下载失败: ' + err.message, 'error');
+  } finally {
+    downloadBtn.disabled = false;
+    downloadBtn.textContent = '📥 下载二维码';
+  }
+}
+
+function initStoreQrModal() {
+  $('#store-qr-btn').addEventListener('click', openStoreQrModal);
+
+  $('#store-qr-close-btn').addEventListener('click', closeStoreQrModal);
+  $('#store-qr-cancel-btn').addEventListener('click', closeStoreQrModal);
+  $('#store-qr-modal').addEventListener('click', function (e) {
+    if (e.target === $('#store-qr-modal')) closeStoreQrModal();
+  });
+
+  $('#store-qr-download-btn').addEventListener('click', downloadStoreQr);
+}
+
+// ============ 初始化 ============
+
+async function init() {
+  initAuth();
+  initGameModal();
+  initUploadModal();
+  initDelete();
+  initNavigation();
+
+  initRulesModal();
+  initSearchAndFilter();
+  initBatchLibraryModal();
+  initStoreQrModal();
+  initRulesUpload();
+
+  // 检查已登录状态
+ currentToken = localStorage.getItem('admin_token');
+ const savedUser = localStorage.getItem('user');
+ if (currentToken && savedUser) {
+ try {
+ currentUser = JSON.parse(savedUser);
+ const me = await apiFetch('/auth/me');
+ currentUser = me.store || currentUser;
+ enterDashboard();
+ } catch {
+ logout();
+ }
+ } else {
+ showPage('auth-page');
+ }
+
+ $('#loading').style.display = 'none';
+}
+
+document.addEventListener('DOMContentLoaded', init);

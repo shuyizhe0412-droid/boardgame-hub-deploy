@@ -80,7 +80,9 @@
               <button id="batch-library-btn" class="btn btn-outline">📚 从游戏库添加</button>
               <button id="store-qr-btn" class="btn btn-outline">📱 店铺入口码</button>
               <button id="batch-qr-btn" class="btn btn-outline">📱 批量二维码</button>
+              
               <button id="add-game-btn" class="btn btn-primary">+ 添加桌游</button>
+        <button id="bgg-import-open-btn" class="btn btn-secondary" onclick="openBggModal()">📥 从BGG导入</button>
             </div>
  </div>
 
@@ -162,10 +164,10 @@
  <div class="detail-section-card">
  <div class="section-title-row">
  <h3>📄 规则书</h3>
- <button id="upload-rulebook-btn" class="btn btn-outline btn-sm">上传</button>
+ <button id="upload-rules-btn" class="btn btn-primary btn-sm">上传并解析</button>
  </div>
- <div id="detail-files" class="files-list">
- <p class="text-muted">暂无规则书文件</p>
+ <div id="detail-rule-sections" class="rule-sections-list">
+ <p class="text-muted">上传规则书（PDF/图片/文本），自动 OCR 提取并分页存储</p>
  </div>
  </div>
 
@@ -189,6 +191,7 @@
  </div>
  </div>
  <input type="file" id="cover-file-input" accept="image/*" style="display:none">
+ <input type="file" id="rules-file-input" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.md" style="display:none">
  </div>
  </div>
  </div>
@@ -257,50 +260,24 @@
  </div>
  </div>
 
- <!-- ======== 弹窗：上传规则书 ======== -->
- <div id="upload-modal" class="modal-overlay" style="display:none">
- <div class="modal modal-sm">
- <div class="modal-header">
- <h3>上传规则书</h3>
- <button class="modal-close" id="upload-modal-close-btn">&times;</button>
- </div>
- <form id="upload-form" class="modal-body">
- <div class="form-group">
- <label>选择文件</label>
- <div class="file-input-wrapper">
- <input type="file" id="upload-file-input" accept=".pdf,.png,.jpg,.jpeg,.webp" required>
- <span class="file-hint">支持 PDF、PNG、JPG 格式</span>
- </div>
- </div>
- <div class="modal-footer">
- <button type="button" class="btn btn-ghost" id="upload-cancel-btn">取消</button>
- <button type="submit" class="btn btn-primary">上传</button>
- </div>
- </form>
- </div>
- </div>
- </div>
-
- <!-- ======== 弹窗：编辑规则 ======== -->
- <div id="rules-modal" class="modal-overlay" style="display:none">
- <div class="modal">
- <div class="modal-header">
- <h3>编辑规则</h3>
- <button class="modal-close" id="rules-modal-close-btn">&times;</button>
- </div>
- <div class="modal-body">
- <div class="form-group">
- <label class="rules-label">规则摘要</label>
- <textarea id="rules-textarea" rows="12" placeholder="请输入规则摘要..."></textarea>
- </div>
- </div>
- <div class="modal-footer">
- <button type="button" class="btn btn-ghost" id="rules-modal-cancel-btn">取消</button>
- <button type="button" class="btn btn-primary" id="rules-modal-save-btn">保存</button>
- </div>
- </div>
- </div>
-
+  <!-- ======== 弹窗：编辑规则段落 ======== -->
+  <div id="rules-modal" class="modal-overlay" style="display:none">
+  <div class="modal modal-lg">
+  <div class="modal-header">
+  <h3>编辑规则段落</h3>
+  <button class="modal-close" id="rules-modal-close-btn">&times;</button>
+  </div>
+  <div class="modal-body">
+  <div id="rule-sections-editor">
+  <p class="text-muted">加载中...</p>
+  </div>
+  </div>
+  <div class="modal-footer">
+  <button type="button" class="btn btn-ghost" id="rules-modal-cancel-btn">取消</button>
+  <button type="button" class="btn btn-primary" id="rules-modal-save-btn">保存全部</button>
+  </div>
+  </div>
+  </div>
 
  <!-- ======== 弹窗：批量二维码 ======== -->
  <div id="batch-qr-modal" class="modal-overlay" style="display:none">
@@ -394,5 +371,30 @@
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
 <script src="/js/batch-qr.js"></script>
+
+<!-- BGG导入弹窗 -->
+<div id="bgg-modal" class="modal-overlay" style="display:none;">
+  <div class="modal modal-lg">
+    <div class="modal-header">
+      <h3>从BGG导入游戏</h3>
+      <button class="modal-close" id="bgg-modal-close-btn">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="bgg-search-bar">
+        <input type="text" id="bgg-search-input" placeholder="输入游戏名称搜索BGG..."
+               onkeydown="if(event.key==='Enter')searchBgg()">
+        <button id="bgg-search-btn" onclick="searchBgg()">搜索</button>
+      </div>
+      <div id="bgg-search-status" class="bgg-status"></div>
+      <div id="bgg-search-results" class="bgg-results-list"></div>
+      <div id="bgg-game-detail" class="bgg-detail" style="display:none;"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="bgg-cancel-btn">取消</button>
+      <button id="bgg-import-btn" class="btn btn-primary" style="display:none;"
+              onclick="importFromBgg()">导入游戏</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

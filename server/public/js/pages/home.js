@@ -200,7 +200,12 @@ App.registerPage('home', (function() {
             '</div>';
     }
 
+    // 过滤无效游戏对象（无name或id）
+    function isValidGame(g) {
+        return g && typeof g === 'object' && g.name && g.id;
+    }
     function renderGameCard(game) {
+        if (!isValidGame(game)) return '';
         var gradients = ['linear-gradient(135deg, #F5D5B0, #E8C08A)', 'linear-gradient(135deg, #C5D5E8, #A8BED8)',
             'linear-gradient(135deg, #D5C8E8, #BFB0D8)', 'linear-gradient(135deg, #7B9E87, #5a7e67)'];
         var bg = gradients[Math.abs(game.id ? game.id.charCodeAt(0) : 0) % gradients.length];
@@ -226,7 +231,7 @@ App.registerPage('home', (function() {
             coverHtml +
             '</div>' +
             '<div class="game-card-info">' +
-            '<div class="game-card-name">' + (game.name || '未知游戏') + '</div>' +
+            '<div class="game-card-name">' + (game.name_cn || game.name || '未知游戏') + '</div>' +
             '<div class="game-card-meta">' + formatInfo(game) + '</div>' +
             '<div class="game-card-stars">' + getDifficultyStars(game.difficulty) + '</div>' +
             '</div>' +
@@ -259,7 +264,7 @@ App.registerPage('home', (function() {
         }
 
         var games = newbieGames.slice(0, 6);
-        var cards = games.map(renderGameCard).join('');
+        var cards = games.filter(isValidGame).map(renderGameCard).join('');
         return renderSection('第一次玩桌游？', '🌱', '查看更多', '?category=入门') +
             '<div class="games-scroll">' + cards + '</div></div>';
     }
@@ -283,14 +288,14 @@ App.registerPage('home', (function() {
             });
         }
 
-        var cards = result.slice(0, 6).map(renderGameCard).join('');
+        var cards = result.slice(0, 6).filter(isValidGame).map(renderGameCard).join('');
         return renderSection('大家都在玩', '🔥', '查看更多', '?category=热门') +
             '<div class="games-scroll">' + cards + '</div></div>';
     }
 
     function renderGuessSection() {
         var games = state.guessGames.length > 0 ? state.guessGames : getGuessGames();
-        var cards = games.map(renderGameCard).join('');
+        var cards = games.filter(isValidGame).map(renderGameCard).join('');
         return renderSection('猜你想玩', '✨', '换一批', '', 'homePage.refreshGuess()') +
             '<div class="games-scroll">' + cards + '</div></div>';
     }
@@ -309,7 +314,7 @@ App.registerPage('home', (function() {
         }
 
         var games = quickGames.slice(0, 6);
-        var cards = games.map(renderGameCard).join('');
+        var cards = games.filter(isValidGame).map(renderGameCard).join('');
         return renderSection('30分钟内能玩完', '⚡', '查看更多', '?duration=30') +
             '<div class="games-scroll">' + cards + '</div></div>';
     }

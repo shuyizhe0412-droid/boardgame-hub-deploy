@@ -488,6 +488,8 @@ input:focus, textarea:focus {
 .detail-cover-img {
     width: 100%;
     height: auto;
+    max-height: 240px;
+    object-fit: contain;
     display: block;
     border-radius: 0 0 12px 12px;
 }
@@ -894,6 +896,21 @@ input:focus, textarea:focus {
     color: var(--text);
     border: 1px solid var(--border);
     border-radius: 16px 16px 16px 4px;
+}
+
+/* AI 规则来源标注 */
+.chat-source-ref {
+    margin-top: 8px;
+    padding: 8px 14px;
+    background: #FEF9E7;
+    border-left: 3px solid #F39C12;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #7D6608;
+    line-height: 1.4;
+}
+.chat-source-icon {
+    font-size: 14px;
 }
 
 /* 加载动画 */
@@ -2328,4 +2345,87 @@ input:focus, textarea:focus {
 
 .rules-back-btn:hover {
     color: var(--text);
+}
+
+
+/* ===== 引用可点击 ===== */
+.citation-link {
+  color: #6c5ce7;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+.citation-link:hover {
+  color: #5a4bd1;
+  background: rgba(108, 92, 231, 0.08);
+  border-radius: 3px;
+}
+/* 引用弹窗 */
+.citation-popup-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: citationFadeIn 0.2s ease;
+}
+@keyframes citationFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.citation-popup-box {
+  background: #fff;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+  animation: citationSlideUp 0.25s ease;
+}
+@keyframes citationSlideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+.citation-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #eee;
+  font-size: 1rem;
+  font-weight: 600;
+}
+.citation-popup-close {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  cursor: pointer;
+  color: #999;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+.citation-popup-close:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+.citation-popup-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  line-height: 1.7;
+  color: #333;
+  font-size: 0.95rem;
+}
+.citation-section-title {
+  font-weight: 600;
+  margin-bottom: 10px;
+  color: #6c5ce7;
+}
+.citation-section-text {
+  white-space: pre-wrap;
+  word-break: break-word;
 }

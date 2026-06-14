@@ -236,6 +236,9 @@ function renderGameDetail(game) {
  // 规则书文件
  loadGameFiles(game.id);
 
+ // 规则书智能解析段落
+ loadRuleSections(game.id);
+
  // 二维码 — 指向玩家端 AI 教学页
  const playerBase = 'https://boardgame-hub-deploy.pages.dev/app.html';
  const shopId = game.store_id || currentUser.id;
@@ -276,6 +279,105 @@ async function deleteFile(fileId) {
   } catch (err) {
     showToast(err.message, 'error');
   }
+}
+
+// ============ 规则书智能解析 ============
+
+async function loadRuleSections(gameId) {
+  var el = document.getElementById('detail-rule-sections');
+  if (!el) return;
+  try {
+    var data = await apiFetch('/rules/' + encodeURIComponent(gameId));
+    var sections = (data && data.sections) || [];
+    if (sections.length === 0) {
+      el.innerHTML = '<p class="text-muted">尚未上传规则书，点击「上传并解析」</p>';
+      return;
+    }
+    var html = '<div class="rule-sections-count">已提取 <b>' + sections.length + '</b> 段规则' +
+      ' <button class="btn btn-sm btn-outline-danger" onclick="clearAllRuleSections(\'' + gameId + '\')" style="margin-left:8px">🗑 清空全部</button></div>';
+    html += '<div class="rule-sections-list-scroll">';
+    sections.forEach(function(s) {
+      html += '<div class="rule-section-item">' +
+        '<div class="rule-section-item-header">' +
+        '<span class="rule-section-badge">第' + s.page_number + '页</span>' +
+        '<span class="rule-section-title">' + (s.section_title || '') + '</span>' +
+        '<span class="rule-section-source">' + (s.source_type === 'image_ocr' ? '🖼️OCR' : s.source_type === 'pdf' ? '📄PDF' : '📝文本') + '</span>' +
+        '<button class="btn btn-sm btn-danger rule-section-del-btn" onclick="deleteRuleSection(\'' + s.id + '\')">✕</button>' +
+        '</div>' +
+        '<div class="rule-section-content">' + (s.content || '').substring(0, 200) + ((s.content || '').length > 200 ? '...' : '') + '</div>' +
+        '</div>';
+    });
+    html += '</div>';
+    el.innerHTML = html;
+  } catch (err) {
+    el.innerHTML = '<p class="text-muted" style="color:#e74c3c">加载规则段落失败: ' + err.message + '</p>';
+  }
+}
+
+async function triggerRulesUpload() {
+  var input = document.getElementById('rules-file-input');
+  if (!input) return;
+  input.click();
+}
+
+async function handleRulesFileSelected(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  if (!currentGameId) { showToast('请先选择游戏', 'error'); e.target.value = ''; return; }
+
+  var el = document.getElementById('detail-rule-sections');
+  if (el) el.innerHTML = '<p class="text-muted">⏳ 正在上传并解析规则书，请稍候...</p>';
+
+  try {
+    var fd = new FormData();
+    fd.append('file', file);
+    fd.append('game_id', currentGameId);
+
+    var resp = await fetch(API + '/rules/upload', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + currentToken },
+      body: fd
+    });
+    var data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || '上传失败');
+
+    showToast('✅ 成功提取 ' + data.sections + ' 段规则');
+    loadRuleSections(currentGameId);
+  } catch (err) {
+    showToast('规则解析失败: ' + err.message, 'error');
+    loadRuleSections(currentGameId);
+  }
+  e.target.value = '';
+}
+
+async function deleteRuleSection(sectionId) {
+  if (!confirm('确定要删除这条规则段落吗？')) return;
+  try {
+    await apiFetch('/rules/section/' + encodeURIComponent(sectionId), { method: 'DELETE' });
+    showToast('删除成功');
+    loadRuleSections(currentGameId);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+async function clearAllRuleSections(gameId) {
+  if (!confirm('确定清空该游戏的全部规则段落吗？此操作不可撤销！')) return;
+  try {
+    await apiFetch('/rules/game/' + encodeURIComponent(gameId), { method: 'DELETE' });
+    showToast('已清空全部规则段落');
+    loadRuleSections(gameId);
+  } catch (err) {
+    showToast(err.message, 'error');
+  }
+}
+
+function initRulesUpload() {
+  var btn = document.getElementById('upload-rules-btn');
+  if (btn) btn.addEventListener('click', triggerRulesUpload);
+
+  var input = document.getElementById('rules-file-input');
+  if (input) input.addEventListener('change', handleRulesFileSelected);
 }
 
 // ============ 添加/编辑桌游弹窗 ============
@@ -407,48 +509,10 @@ function initGameModal() {
  });
 }
 
-// ============ 上传规则书 ============
+// ============ 封面上传 ============
 
-function initUploadModal() {
- $('#upload-rulebook-btn').addEventListener('click', () => {
- $('#upload-modal').style.display = '';
- });
-
- $('#upload-modal-close-btn').addEventListener('click', () => {
- $('#upload-modal').style.display = 'none';
- });
- $('#upload-cancel-btn').addEventListener('click', () => {
- $('#upload-modal').style.display = 'none';
- });
- $('#upload-modal').addEventListener('click', (e) => {
- if (e.target === $('#upload-modal')) $('#upload-modal').style.display = 'none';
- });
-
- $('#upload-form').addEventListener('submit', async (e) => {
- e.preventDefault();
- const file = $('#upload-file-input').files[0];
- if (!file) return;
-
- try {
- const fd = new FormData();
- fd.append('file', file);
- fd.append('game_id', currentGameId);
- await fetch(`${API}/upload`, {
- method: 'POST',
- headers: { 'Authorization': `Bearer ${currentToken}` },
- body: fd
- }).then(r => r.json());
-
- showToast('上传成功');
- $('#upload-modal').style.display = 'none';
- $('#upload-file-input').value = '';
- loadGameFiles(currentGameId);
- } catch (err) {
- showToast('上传失败', 'error');
- }
- });
-
- // 封面上传
+function initCoverUpload() {
+  // 封面上传
  $('#upload-cover-btn').addEventListener('click', () => {
  $('#cover-file-input').click();
  });
@@ -550,7 +614,7 @@ function logout() {
 
 function openRulesModal() {
   document.body.style.overflow = 'hidden';
-  loadExistingRules();
+  loadRuleSectionsForEditor();
   $('#rules-modal').style.display = '';
 }
 
@@ -559,13 +623,45 @@ function closeRulesModal() {
   $('#rules-modal').style.display = 'none';
 }
 
-async function loadExistingRules() {
+async function loadRuleSectionsForEditor() {
+  var el = document.getElementById('rule-sections-editor');
+  if (!el) return;
+  el.innerHTML = '<p class="text-muted">加载中...</p>';
+  
   try {
-    const data = await apiFetch(`/games/${currentGameId}/rules`);
-    $('#rules-textarea').value = data.rules_text || '';
+    var data = await apiFetch('/rules/' + encodeURIComponent(currentGameId));
+    var sections = (data && data.sections) || [];
+    
+    if (sections.length === 0) {
+      el.innerHTML = '<p class="text-muted">暂无规则段落，请先上传规则书</p>';
+      return;
+    }
+    
+    var html = '';
+    sections.forEach(function(s, idx) {
+      html += '<div class="rule-editor-item" data-section-id="' + s.id + '">' +
+        '<div class="rule-editor-header">' +
+        '<span class="rule-editor-index">#' + (idx + 1) + '</span>' +
+        '<label>页码:</label>' +
+        '<input type="number" class="rule-editor-page" value="' + s.page_number + '" min="1" style="width:60px">' +
+        '<label>标题:</label>' +
+        '<input type="text" class="rule-editor-title" value="' + (s.section_title || '').replace(/"/g, '&quot;') + '" style="flex:1">' +
+        '<button class="btn btn-sm btn-danger rule-editor-del" onclick="deleteRuleSection(\'' + s.id + '\')">✕</button>' +
+        '</div>' +
+        '<textarea class="rule-editor-content" rows="4">' + (s.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</textarea>' +
+        '</div>';
+    });
+    el.innerHTML = html;
   } catch (err) {
-    showToast(err.message, 'error');
+    el.innerHTML = '<p class="text-muted" style="color:#e74c3c">加载失败: ' + err.message + '</p>';
   }
+}
+
+async function saveRuleSection(sectionId, pageNum, title, content) {
+  return await apiFetch('/rules/section/' + encodeURIComponent(sectionId), {
+    method: 'PATCH',
+    body: { page_number: pageNum, section_title: title, content: content }
+  });
 }
 
 function initRulesModal() {
@@ -580,15 +676,44 @@ function initRulesModal() {
   });
 
   $('#rules-modal-save-btn').addEventListener('click', async () => {
-    try {
-      await apiFetch(`/games/${currentGameId}/rules`, {
-        method: 'PUT',
-        body: { rules_text: $('#rules-textarea').value }
-      });
-      showToast('规则保存成功');
+    var items = document.querySelectorAll('.rule-editor-item');
+    if (items.length === 0) {
+      showToast('没有可保存的段落', 'error');
+      return;
+    }
+    
+    var saveBtn = $('#rules-modal-save-btn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = '保存中...';
+    
+    var saved = 0;
+    var failed = 0;
+    
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      var sectionId = item.getAttribute('data-section-id');
+      var pageNum = parseInt(item.querySelector('.rule-editor-page').value) || 1;
+      var title = item.querySelector('.rule-editor-title').value.trim();
+      var content = item.querySelector('.rule-editor-content').value.trim();
+      
+      try {
+        await saveRuleSection(sectionId, pageNum, title, content);
+        saved++;
+      } catch (err) {
+        failed++;
+        console.error('保存段落失败:', sectionId, err);
+      }
+    }
+    
+    saveBtn.disabled = false;
+    saveBtn.textContent = '保存全部';
+    
+    if (failed === 0) {
+      showToast('✅ 已保存 ' + saved + ' 段规则');
       closeRulesModal();
-    } catch (err) {
-      showToast(err.message, 'error');
+      loadRuleSections(currentGameId);
+    } else {
+      showToast('保存 ' + saved + ' 段，' + failed + ' 段失败', 'error');
     }
   });
 }
@@ -745,7 +870,7 @@ function renderLibraryPage() {
             '<span>' + stars + '</span>' +
           '</div>' +
           '<div class="library-game-tags">' + (g.tags ? g.tags.split(',').map(function (t) { return '<span class="tag">' + escapeHtml(t.trim()) + '</span>'; }).join('') : '') + '</div>' +
-          '<div class="library-game-desc">' + escapeHtml((g.description || '').slice(0, 60)) + '</div>' +
+          '<div class="library-game-desc">' + escapeHtml((g.description || '').slice(0, 200)) + '</div>' +
         '</div>' +
       '</div>'
     );
@@ -936,12 +1061,202 @@ function initStoreQrModal() {
   $('#store-qr-download-btn').addEventListener('click', downloadStoreQr);
 }
 
+// ========== BGG导入功能 ==========
+
+let bggSelectedGame = null;
+
+function openBggModal() {
+  document.getElementById('bgg-modal').style.display = 'flex';
+  document.getElementById('bgg-search-input').value = '';
+  document.getElementById('bgg-search-results').innerHTML = '';
+  document.getElementById('bgg-search-status').innerHTML = '';
+  document.getElementById('bgg-game-detail').style.display = 'none';
+  document.getElementById('bgg-import-btn').style.display = 'none';
+  bggSelectedGame = null;
+  
+  // 自动加载热门游戏
+  loadHotGames();
+}
+
+async function loadHotGames() {
+  var statusEl = document.getElementById('bgg-search-status');
+  var resultsEl = document.getElementById('bgg-search-results');
+
+  statusEl.textContent = '加载热门桌游...';
+  resultsEl.innerHTML = '';
+
+  try {
+    var games = await apiFetch('/bgg/hot');
+    statusEl.textContent = '热门桌游（也可搜索）';
+
+    resultsEl.innerHTML = games.map(function(g) {
+      var name = g.name_cn || g.name;
+      return '<div class="bgg-result-item" onclick="selectBggGame(\'' + g.bggId + '\')">' +
+        '<span class="bgg-result-rank">#' + g.rank + '</span>' +
+        '<span class="bgg-result-name">' + escapeHtml(name) + '</span>' +
+        (g.year ? '<span class="bgg-result-year">(' + g.year + ')</span>' : '') +
+      '</div>';
+    }).join('');
+  } catch (err) {
+    statusEl.textContent = '加载热门失败，请直接搜索';
+  }
+}
+
+function closeBggModal() {
+  document.getElementById('bgg-modal').style.display = 'none';
+}
+
+async function searchBgg() {
+  var query = document.getElementById('bgg-search-input').value.trim();
+  if (!query) return;
+
+  var statusEl = document.getElementById('bgg-search-status');
+  var resultsEl = document.getElementById('bgg-search-results');
+  var searchBtn = document.getElementById('bgg-search-btn');
+
+  statusEl.textContent = '搜索中...（BGG较慢请耐心等待）';
+  resultsEl.innerHTML = '';
+  searchBtn.disabled = true;
+
+  try {
+    var games = await apiFetch('/bgg/search?query=' + encodeURIComponent(query));
+    if (!games || !games.length) {
+      statusEl.textContent = '未找到游戏，换个关键词试试';
+      searchBtn.disabled = false;
+      return;
+    }
+
+    statusEl.textContent = '找到 ' + games.length + ' 个结果';
+    resultsEl.innerHTML = games.map(function(g) {
+      var name = g.name_cn || g.name;
+      return '<div class="bgg-result-item" onclick="selectBggGame(\'' + g.bggId + '\')">' +
+        '<span class="bgg-result-name">' + escapeHtml(name) + '</span>' +
+        (g.year ? '<span class="bgg-result-year">(' + g.year + ')</span>' : '') +
+      '</div>';
+    }).join('');
+  } catch (err) {
+    statusEl.textContent = '搜索超时或失败，请重试';
+  } finally {
+    searchBtn.disabled = false;
+  }
+}
+
+async function selectBggGame(bggId) {
+  const statusEl = document.getElementById('bgg-search-status');
+  const detailEl = document.getElementById('bgg-game-detail');
+  const importBtn = document.getElementById('bgg-import-btn');
+
+  statusEl.textContent = '加载游戏详情...';
+  detailEl.style.display = 'none';
+
+  try {
+    const game = await apiFetch('/bgg/game/' + bggId);
+    bggSelectedGame = game;
+
+    var displayName = game.name_cn || game.name;
+
+    detailEl.innerHTML =
+      '<div class="bgg-detail-header">' +
+        (game.thumbnail ? '<img src="' + game.thumbnail + '" alt="' + escapeHtml(displayName) + '" class="bgg-detail-thumb">' : '') +
+        '<div>' +
+          '<h4>' + escapeHtml(displayName) + '</h4>' +
+          (game.yearPublished ? '<span class="bgg-detail-year">' + game.yearPublished + '</span>' : '') +
+          (game.rating ? '<span class="bgg-detail-rating">BGG评分: ' + game.rating + '</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="bgg-detail-meta">' +
+        (game.minPlayers ? '<span>玩家: ' + game.minPlayers + '-' + game.maxPlayers + '人</span>' : '') +
+        (game.playingTime ? '<span>时长: ' + game.playingTime + '分钟</span>' : '') +
+        (game.weight ? '<span>复杂度: ' + game.weight + '/5</span>' : '') +
+      '</div>' +
+      '<div class="bgg-detail-tags">' +
+        (game.categories || []).slice(0, 5).map(function(c) { return '<span class="bgg-tag">' + escapeHtml(c) + '</span>'; }).join('') +
+      '</div>' +
+      '<p class="bgg-detail-desc">' + (game.description || '').substring(0, 300) + (game.description && game.description.length > 300 ? '...' : '') + '</p>';
+
+    detailEl.style.display = 'block';
+    importBtn.style.display = 'inline-block';
+    statusEl.textContent = '';
+    document.getElementById('bgg-search-results').innerHTML = '';
+  } catch (err) {
+    statusEl.textContent = '加载游戏详情失败';
+  }
+}
+
+async function importFromBgg() {
+  if (!bggSelectedGame) return;
+
+  const importBtn = document.getElementById('bgg-import-btn');
+  importBtn.disabled = true;
+  importBtn.textContent = '导入中...';
+
+  try {
+    // 翻译描述
+    var descToUse = bggSelectedGame.description || '';
+    if (descToUse && !/[\u4e00-\u9fff]/.test(descToUse)) {
+      try {
+        var transRes = await apiFetch('/bgg/translate-description', {
+          method: 'POST',
+          body: { text: descToUse.substring(0, 1500) }
+        });
+        descToUse = transRes.translated || descToUse;
+      } catch (e) {
+        // 翻译失败用原文
+      }
+    }
+
+    const gameData = {
+      name: bggSelectedGame.name_cn || bggSelectedGame.name,
+      min_players: parseInt(bggSelectedGame.minPlayers) || 1,
+      max_players: parseInt(bggSelectedGame.maxPlayers) || 4,
+      duration: parseInt(bggSelectedGame.playingTime) || 60,
+      difficulty: Math.round(parseFloat(bggSelectedGame.weight)) || 3,
+      tags: (bggSelectedGame.categories || []).slice(0, 5).join(','),
+      description: descToUse,
+      bgg_id: bggSelectedGame.bggId,
+      image_url: bggSelectedGame.image || '',
+      thumb_url: bggSelectedGame.thumbnail || '',
+      cover_image: bggSelectedGame.image || ''
+    };
+
+    await apiFetch('/games', {
+      method: 'POST',
+      body: gameData
+    });
+
+    showToast('游戏导入成功！');
+    closeBggModal();
+    loadGames();
+  } catch (err) {
+    showToast('导入失败: ' + err.message, 'error');
+  } finally {
+    importBtn.disabled = false;
+    importBtn.textContent = '导入游戏';
+  }
+}
+
+function initBggImport() {
+  var openBtn = document.getElementById('bgg-import-open-btn');
+  if (openBtn) openBtn.addEventListener('click', openBggModal);
+
+  var closeBtn = document.getElementById('bgg-modal-close-btn');
+  if (closeBtn) closeBtn.addEventListener('click', closeBggModal);
+
+  var cancelBtn = document.getElementById('bgg-cancel-btn');
+  if (cancelBtn) cancelBtn.addEventListener('click', closeBggModal);
+
+  var modal = document.getElementById('bgg-modal');
+  if (modal) modal.addEventListener('click', function(e) {
+    if (e.target === modal) closeBggModal();
+  });
+}
+
 // ============ 初始化 ============
 
 async function init() {
   initAuth();
   initGameModal();
-  initUploadModal();
+  initCoverUpload();
   initDelete();
   initNavigation();
 
@@ -949,6 +1264,8 @@ async function init() {
   initSearchAndFilter();
   initBatchLibraryModal();
   initStoreQrModal();
+  initRulesUpload();
+  initBggImport();
 
   // 检查已登录状态
  currentToken = localStorage.getItem('admin_token');

@@ -30,8 +30,8 @@ const env = {
     production: [
       `https://boardgame-ai.pages.dev`,
       `https://boardgame-hub.pages.dev`,
-      `https://boardgame-hub-deploy.pages.dev`,
-      `https://boardgame-hub.onrender.com`
+      `https://boardgame-hub.onrender.com`,
+      `https://boardgame-hub-deploy.pages.dev`
     ],
     staging: [
       `https://boardgame-ai-staging.pages.dev`,

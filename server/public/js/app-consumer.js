@@ -25,11 +25,8 @@ function getTabBarHtml(activeTab) {
         { name: 'chat', icon: '🤖', text: 'AI' }
     ];
 
-    if (loggedIn) {
-        tabs.push({ name: 'profile', icon: '👤', text: '我的' });
-    } else {
-        tabs.push({ name: 'about', icon: 'ℹ️', text: '关于' });
-    }
+    // 始终显示「我的」标签，未登录时展示登录引导
+    tabs.push({ name: 'profile', icon: '👤', text: '我的' });
 
     var items = tabs.map(function(tab) {
         var isActive = activeTab === tab.name ? 'active' : '';
@@ -44,12 +41,16 @@ function getTabBarHtml(activeTab) {
 
 // 绑定 TabBar 点击事件（含300ms冷却）
 function bindTabBarEvents() {
-    document.querySelectorAll('.tabbar-item').forEach(function(item) {
+    var items = document.querySelectorAll('.tabbar-item');
+    console.log('[TabBar] 绑定事件, 找到元素数:', items.length);
+    items.forEach(function(item) {
         item.addEventListener('click', function() {
             var now = Date.now();
+            var page = this.dataset.page;
+            console.log('[TabBar] 点击:', page, ', 冷却剩余:', Math.max(0, 300 - (now - _lastNavTime)), 'ms');
             if (now - _lastNavTime < 300) return;
             _lastNavTime = now;
-            navigate('/' + this.dataset.page);
+            navigate('/' + page);
         });
     });
 }
@@ -137,6 +138,7 @@ function renderShopHeader() {
  */
 function renderPageContent(pageName, params, activeTab) {
     // 活跃页面守卫：标记当前活跃页面，防止旧页面异步回调覆盖
+    console.log('[Router] renderPageContent:', pageName, ', activeTab:', activeTab);
     window._activePage = pageName;
 
     var app = document.getElementById('app');
@@ -264,6 +266,7 @@ async function initApp() {
     // 监听路由变化，渲染页面
     window.addEventListener('routechange', function(e) {
         var page = resolvePage(e.detail.page, e.detail.params);
+        console.log('[Router] routechange:', e.detail.page, '→', page, ', hash:', window.location.hash);
         var currentHash = window.location.hash;
 
         // Bug 4 修复：进入 detail/chat 页面前保存来源页
@@ -331,12 +334,7 @@ App.registerPage('about', {
             '扫码学习桌游规则，让桌游入门不再难</div>' +
             // 版本
             '<div style="font-size:12px;color:#B5AFA6;margin-bottom:36px;">v1.0</div>' +
-            // 店家管理入口（醒目按钮区域）—— 仅未登录时显示
-            '<div style="background:#FFFFFF;border:1px solid #E5E0D8;border-radius:12px;padding:20px 28px;margin-bottom:24px;max-width:300px;width:100%;box-shadow:0 2px 8px rgba(0,0,0,0.04);">' +
-            '<div style="font-size:15px;font-weight:600;color:#2D2A26;margin-bottom:6px;">店家管理入口</div>' +
-            '<div style="font-size:13px;color:#9B9488;margin-bottom:16px;">登录后管理您的桌游和规则</div>' +
-            '<a href="#/auth' + shopAppend + '" style="display:inline-block;background:#C4864B;color:#FFFFFF;border:none;border-radius:20px;padding:10px 32px;font-size:14px;font-weight:500;text-decoration:none;cursor:pointer;">登录 / 注册</a>' +
-            '</div>' +
+
             '</div>';
     },
     init: function() {}  // 无异步初始化
