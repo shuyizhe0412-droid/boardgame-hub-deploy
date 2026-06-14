@@ -1201,7 +1201,8 @@ async function importFromBgg() {
       description: (bggSelectedGame.description || '').substring(0, 500),
       bgg_id: bggSelectedGame.bggId,
       image_url: bggSelectedGame.image || '',
-      thumb_url: bggSelectedGame.thumbnail || ''
+      thumb_url: bggSelectedGame.thumbnail || '',
+      cover_image: bggSelectedGame.image || ''
     };
 
     await apiFetch('/games', {
