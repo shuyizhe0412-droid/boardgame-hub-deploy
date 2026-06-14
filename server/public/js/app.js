@@ -1191,6 +1191,20 @@ async function importFromBgg() {
   importBtn.textContent = '导入中...';
 
   try {
+    // 翻译描述
+    var descToUse = bggSelectedGame.description || '';
+    if (descToUse && !/[\u4e00-\u9fff]/.test(descToUse)) {
+      try {
+        var transRes = await apiFetch('/bgg/translate-description', {
+          method: 'POST',
+          body: { text: descToUse.substring(0, 1500) }
+        });
+        descToUse = transRes.translated || descToUse;
+      } catch (e) {
+        // 翻译失败用原文
+      }
+    }
+
     const gameData = {
       name: bggSelectedGame.name_cn || bggSelectedGame.name,
       min_players: parseInt(bggSelectedGame.minPlayers) || 1,
@@ -1198,7 +1212,7 @@ async function importFromBgg() {
       duration: parseInt(bggSelectedGame.playingTime) || 60,
       difficulty: Math.round(parseFloat(bggSelectedGame.weight)) || 3,
       tags: (bggSelectedGame.categories || []).slice(0, 5).join(','),
-      description: bggSelectedGame.description || '',
+      description: descToUse,
       bgg_id: bggSelectedGame.bggId,
       image_url: bggSelectedGame.image || '',
       thumb_url: bggSelectedGame.thumbnail || '',

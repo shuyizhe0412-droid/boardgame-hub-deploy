@@ -237,4 +237,27 @@ function callDeepSeek(prompt) {
   });
 }
 
+// POST /api/bgg/translate-description
+router.post('/translate-description', auth, async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text || text.length < 50) {
+      return res.json({ translated: text });
+    }
+
+    // 已有中文就不翻
+    if (/[\u4e00-\u9fff]/.test(text) && text.length > 100) {
+      return res.json({ translated: text });
+    }
+
+    const prompt = '将以下英文桌游描述翻译成中文，保持原文风格和信息量。只返回翻译结果：\n\n' + text.substring(0, 1500);
+    const translated = await callDeepSeek(prompt);
+
+    res.json({ translated: translated || text });
+  } catch (err) {
+    console.error('翻译失败:', err.message);
+    res.json({ translated: req.body.text }); // 失败返回原文
+  }
+});
+
 module.exports = router;

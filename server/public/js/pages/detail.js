@@ -119,7 +119,7 @@ App.registerPage('detail', (function() {
         var game = state.game;
         if (!game) return '<div class="detail-info card"><p>游戏数据不存在</p></div>';
         
-        var desc = game.description || '';
+        var desc = game.description_cn || game.description || '';
         var shortDesc = desc.length > 60 ? desc.substring(0, 60) + '...' : desc;
         var displayDesc = state.descExpanded ? desc : shortDesc;
         var expandText = state.descExpanded ? '收起' : (desc.length > 60 ? '展开' : '');
