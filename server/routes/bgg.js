@@ -4,6 +4,13 @@ const { parseStringPromise } = require('xml2js');
 const router = express.Router();
 const auth = require('../middleware/auth');
 
+// BGG API 认证
+const BGG_TOKEN = 'e3f8c3ff-9926-4efc-863c-3b92acda4d32';
+const bggHeaders = {
+  'User-Agent': 'BoardgameHub/1.0',
+  'Authorization': 'Bearer ' + BGG_TOKEN
+};
+
 // 简单内存缓存 { key: { data, expiry } }
 const cache = new Map();
 const CACHE_TTL = 30 * 60 * 1000; // 30分钟
@@ -30,7 +37,7 @@ router.get('/search', auth, async (req, res) => {
     if (cached) return res.json(cached);
 
     const url = `https://boardgamegeek.com/xmlapi2/search?query=${encodeURIComponent(query)}&type=boardgame`;
-    const { data } = await axios.get(url, { timeout: 15000 });
+    const { data } = await axios.get(url, { timeout: 15000, headers: bggHeaders });
     const parsed = await parseStringPromise(data);
 
     const items = parsed?.items?.item || [];
@@ -58,7 +65,7 @@ router.get('/game/:bggId', auth, async (req, res) => {
     if (cached) return res.json(cached);
 
     const url = `https://boardgamegeek.com/xmlapi2/thing?id=${bggId}&stats=1`;
-    const { data } = await axios.get(url, { timeout: 15000 });
+    const { data } = await axios.get(url, { timeout: 15000, headers: bggHeaders });
     const parsed = await parseStringPromise(data);
 
     const item = parsed?.items?.item?.[0];
@@ -104,6 +111,36 @@ router.get('/game/:bggId', auth, async (req, res) => {
   } catch (err) {
     console.error('BGG游戏详情失败:', err.message);
     res.status(500).json({ error: 'BGG获取游戏详情失败' });
+  }
+});
+
+// GET /api/bgg/hot — 获取BGG热门游戏列表
+router.get('/hot', auth, async (req, res) => {
+  try {
+    const cacheKey = 'hot:games';
+    const cached = getCached(cacheKey);
+    if (cached) return res.json(cached);
+
+    // 用BGG Hot API获取当前热门游戏
+    const url = 'https://boardgamegeek.com/xmlapi2/hot?type=boardgame';
+    const { data } = await axios.get(url, { timeout: 15000, headers: bggHeaders });
+    const parsed = await parseStringPromise(data);
+
+    const items = parsed?.items?.item || [];
+    const results = items.slice(0, 60).map(function(item) {
+      return {
+        bggId: item.$.id,
+        name: item.name?.[0]?.$.value || '',
+        year: item.yearpublished?.[0]?.$.value || '',
+        rank: item.$.rank || ''
+      };
+    });
+
+    setCache(cacheKey, results);
+    res.json(results);
+  } catch (err) {
+    console.error('BGG热门游戏获取失败:', err.message);
+    res.status(500).json({ error: 'BGG热门游戏获取失败' });
   }
 });
 

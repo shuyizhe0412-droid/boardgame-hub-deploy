@@ -1073,6 +1073,32 @@ function openBggModal() {
   document.getElementById('bgg-game-detail').style.display = 'none';
   document.getElementById('bgg-import-btn').style.display = 'none';
   bggSelectedGame = null;
+  
+  // 自动加载热门游戏
+  loadHotGames();
+}
+
+async function loadHotGames() {
+  var statusEl = document.getElementById('bgg-search-status');
+  var resultsEl = document.getElementById('bgg-search-results');
+
+  statusEl.textContent = '加载热门桌游...';
+  resultsEl.innerHTML = '';
+
+  try {
+    var games = await apiFetch('/bgg/hot');
+    statusEl.textContent = '热门桌游（也可搜索）';
+
+    resultsEl.innerHTML = games.map(function(g) {
+      return '<div class="bgg-result-item" onclick="selectBggGame(\'' + g.bggId + '\')">' +
+        '<span class="bgg-result-rank">#' + g.rank + '</span>' +
+        '<span class="bgg-result-name">' + escapeHtml(g.name) + '</span>' +
+        (g.year ? '<span class="bgg-result-year">(' + g.year + ')</span>' : '') +
+      '</div>';
+    }).join('');
+  } catch (err) {
+    statusEl.textContent = '加载热门失败，请直接搜索';
+  }
 }
 
 function closeBggModal() {
@@ -1080,26 +1106,26 @@ function closeBggModal() {
 }
 
 async function searchBgg() {
-  const query = document.getElementById('bgg-search-input').value.trim();
+  var query = document.getElementById('bgg-search-input').value.trim();
   if (!query) return;
 
-  const statusEl = document.getElementById('bgg-search-status');
-  const resultsEl = document.getElementById('bgg-search-results');
-  const searchBtn = document.getElementById('bgg-search-btn');
+  var statusEl = document.getElementById('bgg-search-status');
+  var resultsEl = document.getElementById('bgg-search-results');
+  var searchBtn = document.getElementById('bgg-search-btn');
 
-  statusEl.textContent = '搜索中...';
+  statusEl.textContent = '搜索中...（BGG较慢请耐心等待）';
   resultsEl.innerHTML = '';
   searchBtn.disabled = true;
 
   try {
-    const games = await apiFetch('/bgg/search?query=' + encodeURIComponent(query));
+    var games = await apiFetch('/bgg/search?query=' + encodeURIComponent(query));
     if (!games || !games.length) {
-      statusEl.textContent = '未找到游戏';
+      statusEl.textContent = '未找到游戏，换个关键词试试';
       searchBtn.disabled = false;
       return;
     }
 
-    statusEl.textContent = '找到 ' + games.length + ' 个游戏';
+    statusEl.textContent = '找到 ' + games.length + ' 个结果';
     resultsEl.innerHTML = games.map(function(g) {
       return '<div class="bgg-result-item" onclick="selectBggGame(\'' + g.bggId + '\')">' +
         '<span class="bgg-result-name">' + escapeHtml(g.name) + '</span>' +
@@ -1107,7 +1133,7 @@ async function searchBgg() {
       '</div>';
     }).join('');
   } catch (err) {
-    statusEl.textContent = '搜索失败，请重试';
+    statusEl.textContent = '搜索超时或失败，请重试';
   } finally {
     searchBtn.disabled = false;
   }
