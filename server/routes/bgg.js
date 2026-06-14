@@ -1,5 +1,6 @@
 const express = require('express');
 const axios = require('axios');
+const https = require('https');
 const { parseStringPromise } = require('xml2js');
 const router = express.Router();
 const auth = require('../middleware/auth');
@@ -47,8 +48,9 @@ router.get('/search', auth, async (req, res) => {
       year: item.yearpublished?.[0]?.$.value || ''
     }));
 
-    setCache(cacheKey, results);
-    res.json(results);
+    const translated = await translateGameNames(results);
+    setCache(cacheKey, translated);
+    res.json(translated);
   } catch (err) {
     console.error('BGG搜索失败:', err.message);
     const errDetail = err.response ? err.response.status + ' ' + err.response.statusText + ' ' + JSON.stringify(err.response.data).substring(0,200) : err.message;
@@ -138,13 +140,96 @@ router.get('/hot', auth, async (req, res) => {
       };
     });
 
-    setCache(cacheKey, results);
-    res.json(results);
+    const translated = await translateGameNames(results);
+    setCache(cacheKey, translated);
+    res.json(translated);
   } catch (err) {
     console.error('BGG热门游戏获取失败:', err.message);
     const errDetail3 = err.response ? err.response.status + ' ' + err.response.statusText + ' ' + JSON.stringify(err.response.data).substring(0,200) : err.message;
     res.status(500).json({ error: 'BGG热门游戏获取失败: ' + errDetail3 });
   }
 });
+
+// ========== 游戏名翻译 ==========
+
+// 批量翻译游戏名（一次请求翻多个，省token）
+async function translateGameNames(games) {
+  if (!games || !games.length) return games;
+
+  const namesToTranslate = games
+    .filter(function(g) { return g.name && !/[\u4e00-\u9fff]/.test(g.name); })
+    .map(function(g) { return g.name; });
+
+  if (!namesToTranslate.length) return games;
+
+  try {
+    const prompt = '将以下英文桌游名称翻译成中文桌游常用译名，只返回翻译结果，每行一个，不要任何解释：\n' +
+                   namesToTranslate.join('\n');
+
+    const translations = await callDeepSeek(prompt);
+    const lines = translations.split('\n').filter(function(l) { return l.trim(); });
+
+    // 创建翻译映射
+    const map = {};
+    for (var i = 0; i < namesToTranslate.length && i < lines.length; i++) {
+      map[namesToTranslate[i]] = lines[i].trim();
+    }
+
+    // 应用到games
+    return games.map(function(g) {
+      if (map[g.name]) {
+        return Object.assign({}, g, { name_cn: map[g.name] });
+      }
+      return g;
+    });
+  } catch (err) {
+    console.error('翻译失败:', err.message);
+    return games;
+  }
+}
+
+// 调用DeepSeek API
+function callDeepSeek(prompt) {
+  return new Promise(function(resolve, reject) {
+    const apiKey = process.env.DEEPSEEK_API_KEY;
+    if (!apiKey) return reject(new Error('DEEPSEEK_API_KEY 未设置'));
+
+    const data = JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [
+        { role: 'system', content: '你是桌游翻译专家，精通中文桌游圈常用译名。' },
+        { role: 'user', content: prompt }
+      ],
+      temperature: 0.1,
+      max_tokens: 2000
+    });
+
+    const req = https.request({
+      hostname: 'api.deepseek.com',
+      path: '/v1/chat/completions',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + apiKey,
+        'Content-Length': Buffer.byteLength(data)
+      },
+      timeout: 30000
+    }, function(res) {
+      var body = '';
+      res.on('data', function(chunk) { body += chunk; });
+      res.on('end', function() {
+        try {
+          const json = JSON.parse(body);
+          resolve(json.choices[0].message.content);
+        } catch (e) {
+          reject(new Error('解析DeepSeek响应失败'));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.write(data);
+    req.end();
+  });
+}
 
 module.exports = router;

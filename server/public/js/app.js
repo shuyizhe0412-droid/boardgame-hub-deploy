@@ -1090,9 +1090,10 @@ async function loadHotGames() {
     statusEl.textContent = '热门桌游（也可搜索）';
 
     resultsEl.innerHTML = games.map(function(g) {
+      var name = g.name_cn || g.name;
       return '<div class="bgg-result-item" onclick="selectBggGame(\'' + g.bggId + '\')">' +
         '<span class="bgg-result-rank">#' + g.rank + '</span>' +
-        '<span class="bgg-result-name">' + escapeHtml(g.name) + '</span>' +
+        '<span class="bgg-result-name">' + escapeHtml(name) + '</span>' +
         (g.year ? '<span class="bgg-result-year">(' + g.year + ')</span>' : '') +
       '</div>';
     }).join('');
@@ -1127,8 +1128,9 @@ async function searchBgg() {
 
     statusEl.textContent = '找到 ' + games.length + ' 个结果';
     resultsEl.innerHTML = games.map(function(g) {
+      var name = g.name_cn || g.name;
       return '<div class="bgg-result-item" onclick="selectBggGame(\'' + g.bggId + '\')">' +
-        '<span class="bgg-result-name">' + escapeHtml(g.name) + '</span>' +
+        '<span class="bgg-result-name">' + escapeHtml(name) + '</span>' +
         (g.year ? '<span class="bgg-result-year">(' + g.year + ')</span>' : '') +
       '</div>';
     }).join('');
@@ -1151,11 +1153,13 @@ async function selectBggGame(bggId) {
     const game = await apiFetch('/bgg/game/' + bggId);
     bggSelectedGame = game;
 
+    var displayName = game.name_cn || game.name;
+
     detailEl.innerHTML =
       '<div class="bgg-detail-header">' +
-        (game.thumbnail ? '<img src="' + game.thumbnail + '" alt="' + escapeHtml(game.name) + '" class="bgg-detail-thumb">' : '') +
+        (game.thumbnail ? '<img src="' + game.thumbnail + '" alt="' + escapeHtml(displayName) + '" class="bgg-detail-thumb">' : '') +
         '<div>' +
-          '<h4>' + escapeHtml(game.name) + '</h4>' +
+          '<h4>' + escapeHtml(displayName) + '</h4>' +
           (game.yearPublished ? '<span class="bgg-detail-year">' + game.yearPublished + '</span>' : '') +
           (game.rating ? '<span class="bgg-detail-rating">BGG评分: ' + game.rating + '</span>' : '') +
         '</div>' +
@@ -1188,7 +1192,7 @@ async function importFromBgg() {
 
   try {
     const gameData = {
-      name: bggSelectedGame.name,
+      name: bggSelectedGame.name_cn || bggSelectedGame.name,
       min_players: parseInt(bggSelectedGame.minPlayers) || 1,
       max_players: parseInt(bggSelectedGame.maxPlayers) || 4,
       duration: parseInt(bggSelectedGame.playingTime) || 60,
