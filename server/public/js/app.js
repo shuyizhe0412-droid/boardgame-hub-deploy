@@ -1198,7 +1198,7 @@ async function importFromBgg() {
       duration: parseInt(bggSelectedGame.playingTime) || 60,
       difficulty: Math.round(parseFloat(bggSelectedGame.weight)) || 3,
       tags: (bggSelectedGame.categories || []).slice(0, 5).join(','),
-      description: (bggSelectedGame.description || '').substring(0, 500),
+      description: bggSelectedGame.description || '',
       bgg_id: bggSelectedGame.bggId,
       image_url: bggSelectedGame.image || '',
       thumb_url: bggSelectedGame.thumbnail || '',
