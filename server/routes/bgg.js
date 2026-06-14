@@ -5,7 +5,7 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 
 // BGG API 认证
-const BGG_TOKEN = 'e3f8c3ff-9926-4efc-863c-3b92acda4d32';
+const BGG_TOKEN = 'f9f5f152-ef1e-4034-928e-9d15a9a266a1';
 const bggHeaders = {
   'User-Agent': 'BoardgameHub/1.0',
   'Authorization': 'Bearer ' + BGG_TOKEN
@@ -51,7 +51,8 @@ router.get('/search', auth, async (req, res) => {
     res.json(results);
   } catch (err) {
     console.error('BGG搜索失败:', err.message);
-    res.status(500).json({ error: 'BGG搜索失败' });
+    const errDetail = err.response ? err.response.status + ' ' + err.response.statusText + ' ' + JSON.stringify(err.response.data).substring(0,200) : err.message;
+    res.status(500).json({ error: 'BGG搜索失败: ' + errDetail });
   }
 });
 
@@ -110,7 +111,8 @@ router.get('/game/:bggId', auth, async (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('BGG游戏详情失败:', err.message);
-    res.status(500).json({ error: 'BGG获取游戏详情失败' });
+    const errDetail2 = err.response ? err.response.status + ' ' + err.response.statusText + ' ' + JSON.stringify(err.response.data).substring(0,200) : err.message;
+    res.status(500).json({ error: 'BGG游戏详情失败: ' + errDetail2 });
   }
 });
 
@@ -140,7 +142,8 @@ router.get('/hot', auth, async (req, res) => {
     res.json(results);
   } catch (err) {
     console.error('BGG热门游戏获取失败:', err.message);
-    res.status(500).json({ error: 'BGG热门游戏获取失败' });
+    const errDetail3 = err.response ? err.response.status + ' ' + err.response.statusText + ' ' + JSON.stringify(err.response.data).substring(0,200) : err.message;
+    res.status(500).json({ error: 'BGG热门游戏获取失败: ' + errDetail3 });
   }
 });
 
